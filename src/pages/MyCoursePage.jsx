@@ -12,26 +12,73 @@
  * - mb-20 → marginBottom for bottom nav spacing
  * - Use SafeAreaView for mobile safe areas
  */
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import CourseCard from '../components/CourseCard';
 import FilterTabs from '../components/FilterTabs';
 import { courses } from '../data/courses';
+import { loadProgress, initializeCourseProgress } from '../utils/progressTracker';
+import { checkCourseExpiry, formatExpiryDate, getDaysUntilExpiry } from '../utils/courseExpiry';
+import logo from '../assets/logo.png';
 
 const MyCoursePage = ({ onCourseClick }) => {
   const [activeFilter, setActiveFilter] = useState('all');
+  const [coursesWithProgress, setCoursesWithProgress] = useState([]);
 
   const filterTabs = [
     { id: 'all', label: 'All' },
     { id: 'in_progress', label: 'In Progress' },
     { id: 'completed', label: 'Completed' },
     { id: 'expired', label: 'Expired' },
-    { id: 'paid', label: 'Paid' },
   ];
 
+  // Initialize courses with progress from localStorage
+  useEffect(() => {
+    const purchasedCourses = courses.filter((course) => course.isPurchased === true);
+    const coursesWithProgressData = purchasedCourses.map((course) => {
+      const initializedCourse = initializeCourseProgress(course, course);
+      // Check expiry date and update status
+      return checkCourseExpiry(initializedCourse);
+    });
+    setCoursesWithProgress(coursesWithProgressData);
+  }, []);
+
+  // Listen for progress updates from course details page
+  useEffect(() => {
+    const handleProgressUpdate = () => {
+      const purchasedCourses = courses.filter((course) => course.isPurchased === true);
+      const coursesWithProgressData = purchasedCourses.map((course) => {
+        const initializedCourse = initializeCourseProgress(course, course);
+        // Check expiry date and update status
+        return checkCourseExpiry(initializedCourse);
+      });
+      setCoursesWithProgress(coursesWithProgressData);
+    };
+
+    // Listen for custom progress update event
+    window.addEventListener('courseProgressUpdated', handleProgressUpdate);
+    // Also listen for storage changes (for cross-tab updates)
+    window.addEventListener('storage', handleProgressUpdate);
+
+    return () => {
+      window.removeEventListener('courseProgressUpdated', handleProgressUpdate);
+      window.removeEventListener('storage', handleProgressUpdate);
+    };
+  }, []);
+
+  // Periodic expiry check (every hour) to update expired courses
+  useEffect(() => {
+    const checkExpiryInterval = setInterval(() => {
+      setCoursesWithProgress((prevCourses) => {
+        return prevCourses.map((course) => checkCourseExpiry(course));
+      });
+    }, 60 * 60 * 1000); // Check every hour
+
+    return () => clearInterval(checkExpiryInterval);
+  }, []);
+
   const filteredCourses = useMemo(() => {
-    // Filter only purchased courses
-    let result = courses.filter((course) => course.isPurchased === true);
+    let result = coursesWithProgress;
     
     if (activeFilter !== 'all') {
       result = result.filter((course) => {
@@ -39,14 +86,13 @@ const MyCoursePage = ({ onCourseClick }) => {
           in_progress: 'IN_PROGRESS',
           completed: 'COMPLETED',
           expired: 'EXPIRED',
-          paid: 'PAID',
         };
         return course.status === categoryMap[activeFilter];
       });
     }
     
     return result;
-  }, [activeFilter]);
+  }, [activeFilter, coursesWithProgress]);
 
   return (
     <div className="flex flex-col min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-100">
@@ -54,18 +100,11 @@ const MyCoursePage = ({ onCourseClick }) => {
       <div className="lg:hidden bg-white/95 backdrop-blur-sm shadow-sm sticky top-0 z-30">
         <div className="flex flex-row items-center justify-between px-4 py-4">
           <h1 className="text-2xl font-bold bg-gradient-to-r from-gray-900 to-gray-700 bg-clip-text text-transparent">My Courses</h1>
-          <div className="flex flex-row items-center gap-4">
-            <button className="text-gray-600 hover:text-gray-900 transition-colors">
-              <span className="text-xl">🔍</span>
-            </button>
-            <button className="text-gray-600 relative hover:text-gray-900 transition-colors">
-              <span className="text-xl">🔔</span>
-              <span className="absolute top-0 right-0 w-2 h-2 bg-red-500 rounded-full animate-pulse"></span>
-            </button>
-            <button className="text-gray-600 hover:text-gray-900 transition-colors">
-              <div className="w-8 h-8 bg-gradient-to-br from-gray-300 to-gray-400 rounded-full"></div>
-            </button>
-          </div>
+          <img 
+            src={logo} 
+            alt="Logo" 
+            className="h-8 w-8 object-contain"
+          />
         </div>
 
         {/* Filter Tabs */}
@@ -134,6 +173,7 @@ const MyCoursePage = ({ onCourseClick }) => {
                   chapters={course.chapters}
                   isPurchased={course.isPurchased}
                   price={course.price}
+                  expiryDate={course.expiryDate}
                   onCourseClick={onCourseClick}
                 />
               </motion.div>

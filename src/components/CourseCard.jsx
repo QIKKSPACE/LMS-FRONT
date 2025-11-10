@@ -16,8 +16,9 @@
  */
 import React from 'react';
 import { motion } from 'framer-motion';
-import { ShoppingCart } from '@mui/icons-material';
+import { ShoppingCart, Event } from '@mui/icons-material';
 import ProgressBar from './ProgressBar';
+import { formatExpiryDate, getDaysUntilExpiry } from '../utils/courseExpiry';
 
 const CourseCard = ({
   courseId,
@@ -30,6 +31,7 @@ const CourseCard = ({
   isPurchased,
   price,
   showStatus = true,
+  expiryDate,
   onCourseClick,
 }) => {
   const handleCardClick = () => {
@@ -154,26 +156,53 @@ const CourseCard = ({
             animate={{ opacity: 1, width: '100%' }}
             transition={{ delay: 0.3, duration: 0.5 }}
           >
-            <ProgressBar progress={progress} />
+            <div className="flex items-center gap-2">
+              <div className="flex-1">
+                <ProgressBar progress={progress} />
+              </div>
+              {progress !== undefined && (
+                <span className="text-sm font-semibold text-red-600 whitespace-nowrap">
+                  {progress}%
+                </span>
+              )}
+            </div>
           </motion.div>
         )}
 
-        {/* Progress Text and Chapters or Buy Button */}
-        {isPurchased ? (
+        {/* Expiry Date Information - Only for purchased courses */}
+        {isPurchased && expiryDate && status !== 'COMPLETED' && (
           <motion.div 
-            className="flex items-center justify-between"
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
+            className="flex items-center gap-2 text-xs mb-2"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
             transition={{ delay: 0.4 }}
           >
-            <span className="text-sm text-primary font-medium">
-              {progress}% completed
-            </span>
-            <span className="text-sm text-gray-500">
-              {chapters} Chapters
+            <Event style={{ fontSize: '14px', color: status === 'EXPIRED' ? '#ef4444' : '#6b7280' }} />
+            <span className={status === 'EXPIRED' ? 'text-red-600 font-semibold' : 'text-gray-600'}>
+              {status === 'EXPIRED' 
+                ? `Expired on ${formatExpiryDate(expiryDate)}`
+                : (() => {
+                    const daysLeft = getDaysUntilExpiry(expiryDate);
+                    if (daysLeft !== null) {
+                      if (daysLeft < 0) {
+                        return `Expired`;
+                      } else if (daysLeft === 0) {
+                        return `Expires today`;
+                      } else if (daysLeft <= 7) {
+                        return `Expires in ${daysLeft} day${daysLeft > 1 ? 's' : ''}`;
+                      } else {
+                        return `Expires ${formatExpiryDate(expiryDate)}`;
+                      }
+                    }
+                    return `Expires ${formatExpiryDate(expiryDate)}`;
+                  })()
+              }
             </span>
           </motion.div>
-        ) : (
+        )}
+
+        {/* Buy Button for non-purchased courses */}
+        {!isPurchased && (
           <motion.div 
             className="flex items-center justify-between mt-2"
             initial={{ opacity: 0, y: 10 }}

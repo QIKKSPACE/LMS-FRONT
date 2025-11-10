@@ -11,8 +11,8 @@
  * - Use react-native-vector-icons for icons
  */
 import React from 'react';
-import { Home, MenuBook, Person, Logout } from '@mui/icons-material';
-import Header from './Header';
+import { Home, MenuBook, Person, Logout, VideoCall } from '@mui/icons-material';
+import logo from '../assets/logo.png';
 
 const SidebarNav = ({ activeTab, onTabChange, onLogout }) => {
   const iconColor = 'rgb(220, 38, 38)'; // rgb(220 38 38 / var(--tw-bg-opacity, 1))
@@ -20,6 +20,7 @@ const SidebarNav = ({ activeTab, onTabChange, onLogout }) => {
   const navItems = [
     { id: 'home', label: 'Home', icon: Home },
     { id: 'mycourse', label: 'My Course', icon: MenuBook },
+    { id: 'livesession', label: 'Live Session', icon: VideoCall },
     { id: 'profile', label: 'Profile', icon: Person },
   ];
 
@@ -35,8 +36,22 @@ const SidebarNav = ({ activeTab, onTabChange, onLogout }) => {
   return (
     <div className="hidden lg:flex fixed left-0 top-0 h-screen w-64 bg-white/80 backdrop-blur-xl border-r border-gray-200/50 flex-col z-40 shadow-2xl">
       {/* Header at the top */}
-      <div className="border-b border-gray-200/50 bg-gradient-to-r from-white/90 to-white/70">
-        <Header />
+      <div className="border-b border-gray-200/50 bg-gradient-to-r from-white/90 to-white/70 px-4 py-4">
+        <div className="flex items-center space-x-3">
+          <img 
+            src={logo} 
+            alt="Logo" 
+            className="h-12 w-12 object-contain flex-shrink-0"
+          />
+          <div className="flex-1 min-w-0 overflow-hidden">
+            <h1 className="text-xs font-extrabold bg-gradient-to-r from-gray-900 to-gray-700 bg-clip-text text-transparent leading-tight mb-0.5 whitespace-nowrap">
+              Spiritual Talk Foundation
+            </h1>
+            <p className="text-[10px] text-gray-600 leading-tight whitespace-nowrap font-medium">
+              Learning Management System
+            </p>
+          </div>
+        </div>
       </div>
       
       {/* Navigation Items */}

@@ -12,7 +12,7 @@
  * - Icons: Use icon libraries (Ionicons, MaterialIcons, etc.)
  */
 import React from 'react';
-import { Home, MenuBook, Person } from '@mui/icons-material';
+import { Home, MenuBook, Person, VideoCall } from '@mui/icons-material';
 
 const BottomNav = ({ activeTab, onTabChange }) => {
   const iconColor = 'rgb(220, 38, 38)'; // rgb(220 38 38 / var(--tw-bg-opacity, 1))
@@ -20,6 +20,7 @@ const BottomNav = ({ activeTab, onTabChange }) => {
   const navItems = [
     { id: 'home', label: 'Home', icon: Home },
     { id: 'mycourse', label: 'My Course', icon: MenuBook },
+    { id: 'livesession', label: 'Live', icon: VideoCall },
     { id: 'profile', label: 'Profile', icon: Person },
   ];
 

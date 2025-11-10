@@ -16,6 +16,7 @@ import React, { useMemo } from 'react';
 import { motion } from 'framer-motion';
 import CourseCard from '../components/CourseCard';
 import { courses } from '../data/courses';
+import logo from '../assets/logo.png';
 
 const HomePage = ({ onCourseClick }) => {
   // Only show unpurchased courses (available to buy)
@@ -29,18 +30,11 @@ const HomePage = ({ onCourseClick }) => {
       <div className="lg:hidden bg-white/95 backdrop-blur-sm shadow-sm sticky top-0 z-30">
         <div className="flex flex-row items-center justify-between px-4 py-4">
           <h1 className="text-2xl font-bold bg-gradient-to-r from-gray-900 to-gray-700 bg-clip-text text-transparent">Home</h1>
-          <div className="flex flex-row items-center gap-4">
-            <button className="text-gray-600 hover:text-gray-900 transition-colors">
-              <span className="text-xl">🔍</span>
-            </button>
-            <button className="text-gray-600 relative hover:text-gray-900 transition-colors">
-              <span className="text-xl">🔔</span>
-              <span className="absolute top-0 right-0 w-2 h-2 bg-red-500 rounded-full animate-pulse"></span>
-            </button>
-            <button className="text-gray-600 hover:text-gray-900 transition-colors">
-              <div className="w-8 h-8 bg-gradient-to-br from-gray-300 to-gray-400 rounded-full"></div>
-            </button>
-          </div>
+          <img 
+            src={logo} 
+            alt="Logo" 
+            className="h-8 w-8 object-contain"
+          />
         </div>
       </div>
 
