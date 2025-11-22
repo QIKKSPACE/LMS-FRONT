@@ -1,4 +1,6 @@
 import React, { useState } from 'react';
+import { AuthProvider, useAuth } from './context/AuthContext';
+import AuthPage from './pages/AuthPage';
 import HomePage from './pages/HomePage';
 import MyCoursePage from './pages/MyCoursePage';
 import BuyCourseDetailPage from './pages/BuyCourseDetailPage';
@@ -8,7 +10,9 @@ import LiveSessionPage from './pages/LiveSessionPage';
 import BottomNav from './components/BottomNav';
 import SidebarNav from './components/SidebarNav';
 
-function App() {
+// Main App Component wrapped with auth check
+function AppContent() {
+  const { isAuthenticated, isLoading } = useAuth();
   const [activeNavTab, setActiveNavTab] = useState('home');
   const [selectedCourseId, setSelectedCourseId] = useState(null);
   const [viewMode, setViewMode] = useState('buy'); // 'buy' or 'mycourse'
@@ -24,6 +28,23 @@ function App() {
     setSelectedCourseId(courseId);
     setViewMode(isPurchased ? 'mycourse' : 'buy');
   };
+
+  // Show loading state
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-100 flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-16 h-16 border-4 border-red-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-gray-600 font-medium">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Show auth page if not authenticated
+  if (!isAuthenticated) {
+    return <AuthPage />;
+  }
 
   const isCourseDetailsPage = selectedCourseId && viewMode === 'mycourse';
 
@@ -43,7 +64,7 @@ function App() {
           <SidebarNav activeTab={activeNavTab} onTabChange={handleTabChange} />
 
           {/* Main Content Area */}
-          <div className="lg:ml-64">
+          <div className="lg:ml-72">
             {/* Page Content */}
             <div>
               {selectedCourseId ? (
@@ -80,5 +101,13 @@ function App() {
   );
 }
 
-export default App;
+// Root App Component with AuthProvider
+function App() {
+  return (
+    <AuthProvider>
+      <AppContent />
+    </AuthProvider>
+  );
+}
 
+export default App;

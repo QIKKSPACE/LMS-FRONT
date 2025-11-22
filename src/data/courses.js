@@ -1,9 +1,8 @@
-// Static course data
+// Static course data (membershipType removed)
 export const courses = [
   {
     id: 1,
     title: "Python for Data Science and Machine Learning",
-    membershipType: "DCA- Silver Membership",
     thumbnail: "https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=800&h=400&fit=crop",
     status: "COMPLETED",
     progress: 100,
@@ -110,7 +109,6 @@ export const courses = [
   {
     id: 2,
     title: "Advanced Spiritual Practices",
-    membershipType: "Premium Membership",
     thumbnail: "https://images.unsplash.com/photo-1503676260728-1c00da094a0b?w=800&h=400&fit=crop",
     status: "PAID",
     progress: 0,
@@ -118,12 +116,11 @@ export const courses = [
     category: "all",
     isPurchased: false,
     price: 399,
-    expiryDate: "2025-06-30", // Expiry date set by admin (YYYY-MM-DD format)
+    expiryDate: "2025-06-30",
   },
   {
     id: 3,
     title: "Meditation Mastery Course",
-    membershipType: "Basic Membership",
     thumbnail: "https://images.unsplash.com/photo-1544367567-0f2fcb009e0b?w=800&h=400&fit=crop",
     status: "PAID",
     progress: 0,
@@ -131,12 +128,11 @@ export const courses = [
     category: "all",
     isPurchased: false,
     price: 199,
-    expiryDate: "2025-08-15", // Expiry date set by admin (YYYY-MM-DD format)
+    expiryDate: "2025-08-15",
   },
   {
     id: 4,
     title: "Yoga Fundamentals",
-    membershipType: "Free Trial",
     thumbnail: "https://images.unsplash.com/photo-1544367567-0f2fcb009e0b?w=800&h=400&fit=crop",
     status: "PAID",
     progress: 0,
@@ -144,12 +140,11 @@ export const courses = [
     category: "all",
     isPurchased: false,
     price: 149,
-    expiryDate: "2025-07-20", // Expiry date set by admin (YYYY-MM-DD format)
+    expiryDate: "2025-07-20",
   },
   {
     id: 5,
     title: "Mindfulness and Wellness",
-    membershipType: "Standard Membership",
     thumbnail: "https://images.unsplash.com/photo-1506126613408-eca07ce68773?w=800&h=400&fit=crop",
     status: "PAID",
     progress: 0,
@@ -157,12 +152,11 @@ export const courses = [
     category: "all",
     isPurchased: false,
     price: 249,
-    expiryDate: "2025-09-10", // Expiry date set by admin (YYYY-MM-DD format)
+    expiryDate: "2025-09-10",
   },
   {
     id: 6,
     title: "Spiritual Growth Journey",
-    membershipType: "Elite Membership",
     thumbnail: "https://images.unsplash.com/photo-1503676260728-1c00da094a0b?w=800&h=400&fit=crop",
     status: "PAID",
     progress: 0,
@@ -170,7 +164,6 @@ export const courses = [
     category: "all",
     isPurchased: false,
     price: 499,
-    expiryDate: "2025-11-30", // Expiry date set by admin (YYYY-MM-DD format)
+    expiryDate: "2025-11-30",
   },
 ];
-

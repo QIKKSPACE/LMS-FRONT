@@ -1,15 +1,4 @@
-/**
- * MyCourseDetailsPage Component
- * 
- * Course details page with video player and course content sidebar
- * Similar to Udemy's course player interface
- * 
- * React Native Conversion Notes:
- * - Replace <div> with <View> from react-native
- * - Replace <video> with video player component
- * - Use ScrollView for scrollable content
- * - Use SafeAreaView for mobile safe areas
- */
+
 import React, { useState, useRef, useEffect } from 'react';
 import { 
   ArrowBack, 

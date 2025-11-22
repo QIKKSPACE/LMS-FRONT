@@ -1,28 +1,10 @@
-/**
- * ProfilePage Component
- * 
- * Display profile page with name, mobile number, email, and address with edit functionality
- * 
- * React Native Conversion Notes:
- * - Replace <div> with <View> from react-native
- * - Replace <p> with <Text> from react-native
- * - Replace <input> with <TextInput> from react-native
- * - flex-col → flexDirection: 'column'
- * - Use SafeAreaView for mobile safe areas
- */
 import React, { useState, useEffect } from 'react';
 import { Person, Phone, LocationOn, Edit, Save, Cancel, Security, Email } from '@mui/icons-material';
+import { useAuth } from '../context/AuthContext';
 import logo from '../assets/logo.png';
 
 const ProfilePage = () => {
-  // This would typically come from user context or API
-  const [profileData, setProfileData] = useState({
-    name: 'John Doe',
-    mobileNumber: '+1 234 567 8900',
-    email: 'john.doe@example.com',
-    address: '123 Main Street, City, State 12345, Country'
-  });
-
+  const { user, updateProfile } = useAuth();
   const [isEditing, setIsEditing] = useState(false);
   const [editedData, setEditedData] = useState({
     name: '',
@@ -30,6 +12,19 @@ const ProfilePage = () => {
     email: '',
     address: ''
   });
+  const [message, setMessage] = useState({ type: '', text: '' });
+
+  // Load user data when component mounts or user changes
+  useEffect(() => {
+    if (user) {
+      setEditedData({
+        name: user.name || '',
+        mobileNumber: user.mobileNumber || '',
+        email: user.email || '',
+        address: user.address || ''
+      });
+    }
+  }, [user]);
 
   // Privacy protection: Prevent screenshots and screen recording
   useEffect(() => {
@@ -92,12 +87,6 @@ const ProfilePage = () => {
         alert('Printing is not allowed on this page.');
         return false;
       }
-
-      // Disable Ctrl+Shift+P (Command Palette in some browsers)
-      if (e.ctrlKey && e.shiftKey && (e.key === 'P' || e.key === 'p')) {
-        e.preventDefault();
-        return false;
-      }
     };
 
     // Add event listener for keyboard shortcuts
@@ -110,20 +99,38 @@ const ProfilePage = () => {
   }, [isEditing]);
 
   const handleEdit = () => {
-    setEditedData({ ...profileData });
     setIsEditing(true);
+    setMessage({ type: '', text: '' });
   };
 
   const handleSave = () => {
-    setProfileData({ ...editedData });
-    setIsEditing(false);
-    console.log('Profile saved:', editedData);
-    // Here you would typically make an API call to save the data
+    const result = updateProfile(editedData);
+    
+    if (result.success) {
+      setMessage({ type: 'success', text: 'Profile updated successfully!' });
+      setIsEditing(false);
+      
+      // Clear message after 3 seconds
+      setTimeout(() => {
+        setMessage({ type: '', text: '' });
+      }, 3000);
+    } else {
+      setMessage({ type: 'error', text: result.error || 'Failed to update profile' });
+    }
   };
 
   const handleCancel = () => {
-    setEditedData({ ...profileData });
+    // Reset to original user data
+    if (user) {
+      setEditedData({
+        name: user.name || '',
+        mobileNumber: user.mobileNumber || '',
+        email: user.email || '',
+        address: user.address || ''
+      });
+    }
     setIsEditing(false);
+    setMessage({ type: '', text: '' });
   };
 
   const handleChange = (e) => {
@@ -133,6 +140,14 @@ const ProfilePage = () => {
       [name]: value
     }));
   };
+
+  if (!user) {
+    return (
+      <div className="flex items-center justify-center h-screen">
+        <p className="text-gray-500">Loading profile...</p>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-100">
@@ -187,6 +202,21 @@ const ProfilePage = () => {
         </div>
       </div>
 
+      {/* Message Display */}
+      {message.text && (
+        <div className="px-4 lg:px-8 pt-4">
+          <div className="max-w-2xl mx-auto">
+            <div className={`p-4 rounded-lg ${
+              message.type === 'success' 
+                ? 'bg-green-50 border border-green-200 text-green-800' 
+                : 'bg-red-50 border border-red-200 text-red-800'
+            }`}>
+              <p className="text-sm font-medium">{message.text}</p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Profile Display */}
       <div className="flex-1 px-4 lg:px-8 py-6 lg:py-8 pb-24 lg:pb-6">
         <div className="max-w-2xl mx-auto">
@@ -239,7 +269,7 @@ const ProfilePage = () => {
                   className="text-2xl font-bold text-gray-900"
                   style={{ userSelect: 'none', WebkitUserSelect: 'none' }}
                 >
-                  {profileData.name}
+                  {editedData.name || 'User'}
                 </h2>
               ) : (
                 <input
@@ -276,8 +306,27 @@ const ProfilePage = () => {
                       className="text-lg text-gray-900"
                       style={{ userSelect: 'none', WebkitUserSelect: 'none' }}
                     >
-                      {profileData.name}
+                      {editedData.name || 'Not provided'}
                     </p>
+                  )}
+                </div>
+              </div>
+
+              {/* Email */}
+              <div className="flex items-start space-x-4 p-4 bg-gray-50 rounded-lg">
+                <div className="flex-shrink-0 mt-1">
+                  <Email style={{ fontSize: '24px', color: '#dc2626' }} />
+                </div>
+                <div className="flex-1">
+                  <p className="text-sm font-medium text-gray-500 mb-1">Email</p>
+                  <p 
+                    className="text-lg text-gray-900"
+                    style={{ userSelect: 'none', WebkitUserSelect: 'none' }}
+                  >
+                    {editedData.email}
+                  </p>
+                  {isEditing && (
+                    <p className="text-xs text-gray-500 mt-1">Email cannot be changed</p>
                   )}
                 </div>
               </div>
@@ -303,34 +352,7 @@ const ProfilePage = () => {
                       className="text-lg text-gray-900"
                       style={{ userSelect: 'none', WebkitUserSelect: 'none' }}
                     >
-                      {profileData.mobileNumber}
-                    </p>
-                  )}
-                </div>
-              </div>
-
-              {/* Email */}
-              <div className="flex items-start space-x-4 p-4 bg-gray-50 rounded-lg">
-                <div className="flex-shrink-0 mt-1">
-                  <Email style={{ fontSize: '24px', color: '#dc2626' }} />
-                </div>
-                <div className="flex-1">
-                  <p className="text-sm font-medium text-gray-500 mb-1">Email</p>
-                  {isEditing ? (
-                    <input
-                      type="email"
-                      name="email"
-                      value={editedData.email}
-                      onChange={handleChange}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500 outline-none bg-white"
-                      placeholder="Enter your email"
-                    />
-                  ) : (
-                    <p 
-                      className="text-lg text-gray-900"
-                      style={{ userSelect: 'none', WebkitUserSelect: 'none' }}
-                    >
-                      {profileData.email}
+                      {editedData.mobileNumber || 'Not provided'}
                     </p>
                   )}
                 </div>
@@ -357,7 +379,7 @@ const ProfilePage = () => {
                       className="text-lg text-gray-900"
                       style={{ userSelect: 'none', WebkitUserSelect: 'none' }}
                     >
-                      {profileData.address}
+                      {editedData.address || 'Not provided'}
                     </p>
                   )}
                 </div>
@@ -391,4 +413,3 @@ const ProfilePage = () => {
 };
 
 export default ProfilePage;
-
