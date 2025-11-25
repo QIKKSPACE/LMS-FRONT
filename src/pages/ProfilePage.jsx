@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Person, Phone, LocationOn, Edit, Save, Cancel, Security, Email } from '@mui/icons-material';
 import { useAuth } from '../context/AuthContext';
+import toast from 'react-hot-toast';
 import logo from '../assets/logo.png';
 
 const ProfilePage = () => {
@@ -13,10 +14,12 @@ const ProfilePage = () => {
     address: ''
   });
   const [message, setMessage] = useState({ type: '', text: '' });
+  const [isSaving, setIsSaving] = useState(false);
 
   // Load user data when component mounts or user changes
   useEffect(() => {
     if (user) {
+      console.log('Loading user data:', user);
       setEditedData({
         name: user.name || '',
         mobileNumber: user.mobileNumber || '',
@@ -100,22 +103,46 @@ const ProfilePage = () => {
 
   const handleEdit = () => {
     setIsEditing(true);
-    setMessage({ type: '', text: '' });
   };
 
-  const handleSave = () => {
-    const result = updateProfile(editedData);
+  const handleSave = async () => {
+    console.log('Attempting to save profile:', editedData);
     
-    if (result.success) {
-      setMessage({ type: 'success', text: 'Profile updated successfully!' });
-      setIsEditing(false);
+    // Validation
+    if (!editedData.name.trim()) {
+      toast.error('Name is required');
+      return;
+    }
+
+    setIsSaving(true);
+
+    try {
+      // Only send fields that can be updated (exclude email and uid)
+      const updates = {
+        name: editedData.name.trim(),
+        mobileNumber: editedData.mobileNumber.trim(),
+        address: editedData.address.trim()
+      };
+
+      console.log('Sending updates:', updates);
+
+      const result = await updateProfile(updates);
       
-      // Clear message after 3 seconds
-      setTimeout(() => {
-        setMessage({ type: '', text: '' });
-      }, 3000);
-    } else {
-      setMessage({ type: 'error', text: result.error || 'Failed to update profile' });
+      console.log('Update result:', result);
+
+      if (result && result.success) {
+        toast.success('Profile updated successfully!');
+        setIsEditing(false);
+      } else {
+        const errorMessage = result?.error || 'Failed to update profile';
+        console.error('Update failed:', errorMessage);
+        toast.error(errorMessage);
+      }
+    } catch (error) {
+      console.error('Exception during save:', error);
+      toast.error('An unexpected error occurred. Please try again.');
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -130,7 +157,6 @@ const ProfilePage = () => {
       });
     }
     setIsEditing(false);
-    setMessage({ type: '', text: '' });
   };
 
   const handleChange = (e) => {
@@ -144,7 +170,10 @@ const ProfilePage = () => {
   if (!user) {
     return (
       <div className="flex items-center justify-center h-screen">
-        <p className="text-gray-500">Loading profile...</p>
+        <div className="text-center">
+          <div className="w-16 h-16 border-4 border-red-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-gray-600 font-medium">Loading profile...</p>
+        </div>
       </div>
     );
   }
@@ -201,21 +230,6 @@ const ProfilePage = () => {
           </div>
         </div>
       </div>
-
-      {/* Message Display */}
-      {message.text && (
-        <div className="px-4 lg:px-8 pt-4">
-          <div className="max-w-2xl mx-auto">
-            <div className={`p-4 rounded-lg ${
-              message.type === 'success' 
-                ? 'bg-green-50 border border-green-200 text-green-800' 
-                : 'bg-red-50 border border-red-200 text-red-800'
-            }`}>
-              <p className="text-sm font-medium">{message.text}</p>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Profile Display */}
       <div className="flex-1 px-4 lg:px-8 py-6 lg:py-8 pb-24 lg:pb-6">
@@ -391,17 +405,28 @@ const ProfilePage = () => {
               <div className="flex justify-end gap-3 mt-6 pt-6 border-t border-gray-200">
                 <button
                   onClick={handleCancel}
-                  className="flex items-center gap-2 px-4 py-2 border border-gray-300 text-gray-700 font-medium rounded-lg hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 transition-colors"
+                  disabled={isSaving}
+                  className="flex items-center gap-2 px-4 py-2 border border-gray-300 text-gray-700 font-medium rounded-lg hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <Cancel style={{ fontSize: '18px' }} />
                   <span>Cancel</span>
                 </button>
                 <button
                   onClick={handleSave}
-                  className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white font-medium rounded-lg hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 transition-colors"
+                  disabled={isSaving}
+                  className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white font-medium rounded-lg hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  <Save style={{ fontSize: '18px' }} />
-                  <span>Save</span>
+                  {isSaving ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                      <span>Saving...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Save style={{ fontSize: '18px' }} />
+                      <span>Save</span>
+                    </>
+                  )}
                 </button>
               </div>
             )}

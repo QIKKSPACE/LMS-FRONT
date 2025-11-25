@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Person, Email, Lock, Visibility, VisibilityOff } from '@mui/icons-material';
 import { useAuth } from '../context/AuthContext';
+import toast, { Toaster } from 'react-hot-toast';
 import logo from '../assets/logo.png';
 
 const AuthPage = () => {
@@ -15,7 +16,6 @@ const AuthPage = () => {
   });
   const [errors, setErrors] = useState({});
   const [isLoading, setIsLoading] = useState(false);
-  const [message, setMessage] = useState({ type: '', text: '' });
 
   const { login, signup } = useAuth();
 
@@ -65,22 +65,26 @@ const AuthPage = () => {
     e.preventDefault();
     
     if (!validateForm()) {
+      toast.error('Please fix the errors in the form');
       return;
     }
 
     setIsLoading(true);
-    setMessage({ type: '', text: '' });
 
     try {
       let result;
       if (isLogin) {
-        result = await login(formData.email, formData.password);
+        console.log('Attempting login...');
+        result = await login(formData.email.trim(), formData.password);
       } else {
-        result = await signup(formData.name, formData.email, formData.password);
+        console.log('Attempting signup...');
+        result = await signup(formData.name.trim(), formData.email.trim(), formData.password);
       }
 
-      if (result.success) {
-        setMessage({ type: 'success', text: isLogin ? 'Login successful!' : 'Account created successfully!' });
+      console.log('Auth result:', result);
+
+      if (result && result.success) {
+        toast.success(isLogin ? 'Login successful!' : 'Account created successfully!');
         // Reset form
         setFormData({
           name: '',
@@ -89,10 +93,13 @@ const AuthPage = () => {
           confirmPassword: ''
         });
       } else {
-        setMessage({ type: 'error', text: result.error });
+        const errorMessage = result?.error || 'An error occurred. Please try again.';
+        console.error('Auth failed:', errorMessage);
+        toast.error(errorMessage);
       }
     } catch (error) {
-      setMessage({ type: 'error', text: 'An error occurred. Please try again.' });
+      console.error('Auth exception:', error);
+      toast.error('An unexpected error occurred. Please try again.');
     } finally {
       setIsLoading(false);
     }
@@ -107,11 +114,47 @@ const AuthPage = () => {
       confirmPassword: ''
     });
     setErrors({});
-    setMessage({ type: '', text: '' });
   };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-red-50 via-white to-rose-50 flex items-center justify-center px-4 py-8">
+      {/* Toast Container */}
+      <Toaster
+        position="top-center"
+        reverseOrder={false}
+        gutter={8}
+        toastOptions={{
+          duration: 4000,
+          style: {
+            background: '#fff',
+            color: '#363636',
+            padding: '16px',
+            borderRadius: '8px',
+            boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
+          },
+          success: {
+            duration: 3000,
+            iconTheme: {
+              primary: '#10b981',
+              secondary: '#fff',
+            },
+            style: {
+              border: '2px solid #10b981',
+            },
+          },
+          error: {
+            duration: 5000,
+            iconTheme: {
+              primary: '#ef4444',
+              secondary: '#fff',
+            },
+            style: {
+              border: '2px solid #ef4444',
+            },
+          },
+        }}
+      />
+
       {/* Animated background elements */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
         <motion.div
@@ -176,24 +219,6 @@ const AuthPage = () => {
           className="bg-white/95 backdrop-blur-sm rounded-2xl shadow-2xl p-8"
           layout
         >
-          {/* Message Display */}
-          <AnimatePresence mode="wait">
-            {message.text && (
-              <motion.div
-                initial={{ opacity: 0, y: -10 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -10 }}
-                className={`mb-6 p-4 rounded-lg ${
-                  message.type === 'success' 
-                    ? 'bg-green-50 border border-green-200 text-green-800' 
-                    : 'bg-red-50 border border-red-200 text-red-800'
-                }`}
-              >
-                <p className="text-sm font-medium">{message.text}</p>
-              </motion.div>
-            )}
-          </AnimatePresence>
-
           <form onSubmit={handleSubmit} className="space-y-5">
             {/* Name Field (Signup Only) */}
             <AnimatePresence mode="wait">

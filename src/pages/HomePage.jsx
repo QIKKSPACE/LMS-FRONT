@@ -1,16 +1,39 @@
-import React, { useMemo, useState } from 'react';
+// src/pages/HomePage.jsx - UPDATED WITH FIRESTORE
+import React, { useMemo, useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import CourseCard from '../components/CourseCard';
 import SearchBar from '../components/SearchBar';
-import { courses } from '../data/courses';
+import { getAllCourses } from '../services/courseService';
 import logo from '../assets/logo.png';
 
 const HomePage = ({ onCourseClick }) => {
   const [searchQuery, setSearchQuery] = useState('');
+  const [courses, setCourses] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  // Fetch courses from Firestore
+  useEffect(() => {
+    const fetchCourses = async () => {
+      try {
+        setLoading(true);
+        const fetchedCourses = await getAllCourses();
+        setCourses(fetchedCourses);
+        setError(null);
+      } catch (err) {
+        console.error('Error loading courses:', err);
+        setError('Failed to load courses. Please try again.');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchCourses();
+  }, []);
 
   const availableCourses = useMemo(() => {
     return courses.filter((course) => course.isPurchased === false);
-  }, []);
+  }, [courses]);
 
   const filteredCourses = useMemo(() => {
     if (!searchQuery.trim()) {
@@ -30,6 +53,38 @@ const HomePage = ({ onCourseClick }) => {
   const handleClearSearch = () => {
     setSearchQuery('');
   };
+
+  // Loading state
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-screen bg-gradient-to-br from-gray-50 via-white to-gray-100">
+        <div className="text-center">
+          <div className="w-16 h-16 border-4 border-red-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-gray-600 font-medium">Loading courses...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Error state
+  if (error) {
+    return (
+      <div className="flex items-center justify-center h-screen bg-gradient-to-br from-gray-50 via-white to-gray-100">
+        <div className="text-center">
+          <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+            <span className="text-red-600 text-2xl">⚠️</span>
+          </div>
+          <p className="text-red-600 font-medium">{error}</p>
+          <button 
+            onClick={() => window.location.reload()} 
+            className="mt-4 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700"
+          >
+            Retry
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-100 overflow-hidden">
@@ -126,7 +181,9 @@ const HomePage = ({ onCourseClick }) => {
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
                 <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500"></span>
               </motion.span>
-              <span className="text-sm font-semibold text-red-700">New Courses Available</span>
+              <span className="text-sm font-semibold text-red-700">
+                {courses.length} Courses Available
+              </span>
             </motion.div>
 
             {/* Main heading */}

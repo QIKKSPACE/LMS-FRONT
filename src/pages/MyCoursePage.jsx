@@ -1,17 +1,21 @@
+// src/pages/MyCoursePage.jsx - UPDATED WITH FIRESTORE
 import React, { useState, useMemo, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import CourseCard from '../components/CourseCard';
 import FilterTabs from '../components/FilterTabs';
 import SearchBar from '../components/SearchBar';
-import { courses } from '../data/courses';
-import { loadProgress, initializeCourseProgress } from '../utils/progressTracker';
-import { checkCourseExpiry, formatExpiryDate, getDaysUntilExpiry } from '../utils/courseExpiry';
+import { getUserCourses } from '../services/courseService';
+import { useAuth } from '../context/AuthContext';
+import { checkCourseExpiry } from '../utils/courseExpiry';
 import logo from '../assets/logo.png';
 
 const MyCoursePage = ({ onCourseClick }) => {
+  const { user } = useAuth();
   const [activeFilter, setActiveFilter] = useState('all');
   const [coursesWithProgress, setCoursesWithProgress] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
   const filterTabs = [
     { id: 'all', label: 'All' },
@@ -20,41 +24,56 @@ const MyCoursePage = ({ onCourseClick }) => {
     { id: 'expired', label: 'Expired' },
   ];
 
-  // Initialize courses with progress from localStorage
+  // Fetch user's courses from Firestore
   useEffect(() => {
-    const purchasedCourses = courses.filter((course) => course.isPurchased === true);
-    const coursesWithProgressData = purchasedCourses.map((course) => {
-      const initializedCourse = initializeCourseProgress(course, course);
-      // Check expiry date and update status
-      return checkCourseExpiry(initializedCourse);
-    });
-    setCoursesWithProgress(coursesWithProgressData);
-  }, []);
+    const fetchUserCourses = async () => {
+      if (!user || !user.uid) {
+        setLoading(false);
+        return;
+      }
 
-  // Listen for progress updates from course details page
-  useEffect(() => {
-    const handleProgressUpdate = () => {
-      const purchasedCourses = courses.filter((course) => course.isPurchased === true);
-      const coursesWithProgressData = purchasedCourses.map((course) => {
-        const initializedCourse = initializeCourseProgress(course, course);
-        // Check expiry date and update status
-        return checkCourseExpiry(initializedCourse);
-      });
-      setCoursesWithProgress(coursesWithProgressData);
+      try {
+        setLoading(true);
+        const userCourses = await getUserCourses(user.uid);
+        
+        // Check expiry for each course
+        const coursesWithExpiryCheck = userCourses.map(course => 
+          checkCourseExpiry(course)
+        );
+        
+        setCoursesWithProgress(coursesWithExpiryCheck);
+        setError(null);
+      } catch (err) {
+        console.error('Error loading user courses:', err);
+        setError('Failed to load your courses. Please try again.');
+      } finally {
+        setLoading(false);
+      }
     };
 
-    // Listen for custom progress update event
-    window.addEventListener('courseProgressUpdated', handleProgressUpdate);
-    // Also listen for storage changes (for cross-tab updates)
-    window.addEventListener('storage', handleProgressUpdate);
+    fetchUserCourses();
+  }, [user]);
 
+  // Refresh courses when returning from course details
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible' && user?.uid) {
+        getUserCourses(user.uid).then(courses => {
+          const coursesWithExpiryCheck = courses.map(course => 
+            checkCourseExpiry(course)
+          );
+          setCoursesWithProgress(coursesWithExpiryCheck);
+        });
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
     return () => {
-      window.removeEventListener('courseProgressUpdated', handleProgressUpdate);
-      window.removeEventListener('storage', handleProgressUpdate);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
-  }, []);
+  }, [user]);
 
-  // Periodic expiry check (every hour) to update expired courses
+  // Periodic expiry check (every hour)
   useEffect(() => {
     const checkExpiryInterval = setInterval(() => {
       setCoursesWithProgress((prevCourses) => {
@@ -98,6 +117,38 @@ const MyCoursePage = ({ onCourseClick }) => {
   const handleClearSearch = () => {
     setSearchQuery('');
   };
+
+  // Loading state
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-screen bg-gradient-to-br from-gray-50 via-white to-gray-100">
+        <div className="text-center">
+          <div className="w-16 h-16 border-4 border-red-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-gray-600 font-medium">Loading your courses...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Error state
+  if (error) {
+    return (
+      <div className="flex items-center justify-center h-screen bg-gradient-to-br from-gray-50 via-white to-gray-100">
+        <div className="text-center">
+          <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+            <span className="text-red-600 text-2xl">⚠️</span>
+          </div>
+          <p className="text-red-600 font-medium">{error}</p>
+          <button 
+            onClick={() => window.location.reload()} 
+            className="mt-4 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700"
+          >
+            Retry
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-100">
@@ -162,7 +213,10 @@ const MyCoursePage = ({ onCourseClick }) => {
       <div className="flex-1 px-6 lg:px-8 py-6 lg:py-8 pb-24 lg:pb-6">
         {coursesWithProgress.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-64">
-            <p className="text-gray-500 text-lg mb-2">No purchased courses yet</p>
+            <div className="w-24 h-24 bg-gradient-to-br from-gray-200 to-gray-300 rounded-full flex items-center justify-center mb-4">
+              <span className="text-4xl">📚</span>
+            </div>
+            <p className="text-gray-500 text-lg mb-2 font-semibold">No purchased courses yet</p>
             <p className="text-gray-400 text-sm">Browse courses in the Home section to get started</p>
           </div>
         ) : filteredCourses.length === 0 ? (
