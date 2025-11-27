@@ -1,4 +1,4 @@
-
+// src/pages/MyCourseDetailsPage.jsx - UPDATED WITH FIRESTORE
 import React, { useState, useRef, useEffect } from 'react';
 import { 
   ArrowBack, 
@@ -14,16 +14,15 @@ import {
   ExpandMore,
   ExpandLess
 } from '@mui/icons-material';
-import { courses } from '../data/courses';
-import { 
-  toggleLectureCompletion, 
-  saveProgress, 
-  initializeCourseProgress 
-} from '../utils/progressTracker';
+import { getCourseById, toggleLectureCompletion as toggleLectureInFirestore } from '../services/courseService';
+import { useAuth } from '../context/AuthContext';
 import { checkCourseExpiry } from '../utils/courseExpiry';
+import toast from 'react-hot-toast';
 
 const MyCourseDetailsPage = ({ courseId, onBack }) => {
+  const { user } = useAuth();
   const [course, setCourse] = useState(null);
+  const [loading, setLoading] = useState(true);
   const [selectedSection, setSelectedSection] = useState(null);
   const [selectedLecture, setSelectedLecture] = useState(null);
   const [expandedSections, setExpandedSections] = useState(new Set());
@@ -44,25 +43,41 @@ const MyCourseDetailsPage = ({ courseId, onBack }) => {
     return () => window.removeEventListener('resize', checkScreenSize);
   }, []);
 
+  // Fetch course from Firestore
   useEffect(() => {
-    const foundCourse = courses.find((c) => c.id === courseId);
-    if (foundCourse) {
-      // Initialize course with saved progress or default data
-      const initializedCourse = initializeCourseProgress(foundCourse, foundCourse);
-      // Check expiry date and update status
-      const courseWithExpiryCheck = checkCourseExpiry(initializedCourse);
-      setCourse(courseWithExpiryCheck);
-      
-      // Set first section and lecture as default
-      if (courseWithExpiryCheck.sections && courseWithExpiryCheck.sections.length > 0) {
-        const firstSection = courseWithExpiryCheck.sections[0];
-        setSelectedSection(firstSection);
-        if (firstSection.lecturesList && firstSection.lecturesList.length > 0) {
-          setSelectedLecture(firstSection.lecturesList[0]);
+    const fetchCourse = async () => {
+      try {
+        setLoading(true);
+        const courseData = await getCourseById(courseId);
+        
+        if (courseData) {
+          // Check expiry
+          const courseWithExpiryCheck = checkCourseExpiry(courseData);
+          setCourse(courseWithExpiryCheck);
+          
+          // Set first section and lecture as default
+          if (courseWithExpiryCheck.sections && courseWithExpiryCheck.sections.length > 0) {
+            const firstSection = courseWithExpiryCheck.sections[0];
+            setSelectedSection(firstSection);
+            if (firstSection.lecturesList && firstSection.lecturesList.length > 0) {
+              setSelectedLecture(firstSection.lecturesList[0]);
+            }
+            // Expand first section by default
+            setExpandedSections(new Set([firstSection.id]));
+          }
+        } else {
+          toast.error('Course not found');
         }
-        // Expand first section by default
-        setExpandedSections(new Set([firstSection.id]));
+      } catch (error) {
+        console.error('Error fetching course:', error);
+        toast.error('Failed to load course');
+      } finally {
+        setLoading(false);
       }
+    };
+
+    if (courseId) {
+      fetchCourse();
     }
   }, [courseId]);
 
@@ -82,25 +97,38 @@ const MyCourseDetailsPage = ({ courseId, onBack }) => {
     setIsPlaying(true);
   };
 
-  const handleToggleLectureCompletion = (e, sectionId, lectureId) => {
-    e.stopPropagation(); // Prevent lecture selection when clicking checkbox
+  const handleToggleLectureCompletion = async (e, sectionId, lectureId) => {
+    e.stopPropagation();
     
-    if (!course) return;
+    if (!course || !user) return;
     
-    const updatedCourse = toggleLectureCompletion(course, sectionId, lectureId);
-    setCourse(updatedCourse);
-    
-    // Save progress to localStorage
-    saveProgress(courseId, updatedCourse);
-    
-    // Update selected section and lecture if they were modified
-    const updatedSection = updatedCourse.sections.find(s => s.id === sectionId);
-    if (updatedSection) {
-      setSelectedSection(updatedSection);
-      const updatedLecture = updatedSection.lecturesList.find(l => l.id === lectureId);
-      if (updatedLecture) {
-        setSelectedLecture(updatedLecture);
+    try {
+      const result = await toggleLectureInFirestore(user.uid, courseId, lectureId);
+      
+      if (result.success) {
+        // Refresh course data
+        const updatedCourse = await getCourseById(courseId);
+        if (updatedCourse) {
+          const courseWithExpiryCheck = checkCourseExpiry(updatedCourse);
+          setCourse(courseWithExpiryCheck);
+          
+          // Update selected section and lecture
+          const updatedSection = courseWithExpiryCheck.sections.find(s => s.id === sectionId);
+          if (updatedSection) {
+            setSelectedSection(updatedSection);
+            const updatedLecture = updatedSection.lecturesList.find(l => l.id === lectureId);
+            if (updatedLecture) {
+              setSelectedLecture(updatedLecture);
+            }
+          }
+        }
+        toast.success('Progress updated!');
+      } else {
+        toast.error('Failed to update progress');
       }
+    } catch (error) {
+      console.error('Error toggling lecture:', error);
+      toast.error('An error occurred');
     }
   };
 
@@ -146,23 +174,51 @@ const MyCourseDetailsPage = ({ courseId, onBack }) => {
     }
   };
 
+  // Loading state
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-screen bg-gray-900">
+        <div className="text-center">
+          <div className="w-16 h-16 border-4 border-red-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-white font-medium">Loading course...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Course not found
   if (!course) {
     return (
-      <div className="flex items-center justify-center h-screen">
-        <p className="text-gray-500">Course not found</p>
+      <div className="flex items-center justify-center h-screen bg-gray-900">
+        <div className="text-center">
+          <p className="text-white text-lg mb-4">Course not found</p>
+          <button
+            onClick={onBack}
+            className="px-6 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700"
+          >
+            Go Back
+          </button>
+        </div>
       </div>
     );
   }
 
+  // No sections
   if (!course.sections || course.sections.length === 0) {
     return (
-      <div className="flex items-center justify-center h-screen">
-        <p className="text-gray-500">Course content not available</p>
+      <div className="flex items-center justify-center h-screen bg-gray-900">
+        <div className="text-center">
+          <p className="text-white text-lg mb-4">Course content not available</p>
+          <button
+            onClick={onBack}
+            className="px-6 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700"
+          >
+            Go Back
+          </button>
+        </div>
       </div>
     );
   }
-
-  // Tabs removed - only showing overview content directly
 
   return (
     <div className="flex flex-col h-screen bg-gray-900 overflow-hidden">
@@ -214,23 +270,32 @@ const MyCourseDetailsPage = ({ courseId, onBack }) => {
               <ChevronRight style={{ fontSize: '32px' }} />
             </button>
 
-            {/* Video Placeholder */}
+            {/* Video or Placeholder */}
             <div className="w-full h-full flex items-center justify-center">
-              <div className="text-center">
-                <button
-                  onClick={handlePlayPause}
-                  className="w-20 h-20 bg-white/20 hover:bg-white/30 rounded-full flex items-center justify-center mb-4 transition-colors"
-                >
-                  {isPlaying ? (
-                    <Pause style={{ fontSize: '40px', color: 'white' }} />
-                  ) : (
-                    <PlayArrow style={{ fontSize: '40px', color: 'white', marginLeft: '4px' }} />
-                  )}
-                </button>
-                <p className="text-white text-lg">
-                  {selectedLecture ? selectedLecture.title : 'Select a lecture to begin'}
-                </p>
-              </div>
+              {selectedLecture && selectedLecture.videoUrl ? (
+                <iframe
+                  src={selectedLecture.videoUrl}
+                  className="w-full h-full"
+                  allowFullScreen
+                  title={selectedLecture.title}
+                ></iframe>
+              ) : (
+                <div className="text-center">
+                  <button
+                    onClick={handlePlayPause}
+                    className="w-20 h-20 bg-white/20 hover:bg-white/30 rounded-full flex items-center justify-center mb-4 transition-colors"
+                  >
+                    {isPlaying ? (
+                      <Pause style={{ fontSize: '40px', color: 'white' }} />
+                    ) : (
+                      <PlayArrow style={{ fontSize: '40px', color: 'white', marginLeft: '4px' }} />
+                    )}
+                  </button>
+                  <p className="text-white text-lg">
+                    {selectedLecture ? selectedLecture.title : 'Select a lecture to begin'}
+                  </p>
+                </div>
+              )}
             </div>
 
             {/* Video Controls */}
@@ -263,12 +328,10 @@ const MyCourseDetailsPage = ({ courseId, onBack }) => {
               </div>
             </div>
           </div>
-
         </div>
 
         {/* Course Content - Mobile (Below video) */}
         <div className="lg:hidden bg-gray-800 border-t border-gray-700 flex flex-col flex-1 overflow-hidden">
-          {/* Course Content List - Mobile */}
           <div className="flex-1 overflow-y-auto p-4">
             {course.sections.map((section) => (
               <div key={section.id} className="mb-4">
@@ -347,7 +410,6 @@ const MyCourseDetailsPage = ({ courseId, onBack }) => {
               scrollbar-color: #4b5563 #374151;
             }
           `}</style>
-          {/* Course Content List - Desktop */}
           <div className="flex-1 overflow-y-auto p-4 course-content-scroll min-h-0 max-h-full">
             {course.sections.map((section) => (
               <div key={section.id} className="mb-4">
@@ -369,42 +431,41 @@ const MyCourseDetailsPage = ({ courseId, onBack }) => {
                     <ExpandMore className="text-gray-400" />
                   )}
                 </button>
-                  {expandedSections.has(section.id) && (
-                    <div className="mt-2 space-y-1">
-                      {section.lecturesList.map((lecture) => (
-                        <button
-                          key={lecture.id}
-                          onClick={() => selectLecture(section, lecture)}
-                          className={`w-full flex items-center justify-between p-2 rounded hover:bg-gray-700 transition-colors text-left ${
-                            selectedLecture?.id === lecture.id && selectedSection?.id === section.id
-                              ? 'bg-gray-700 border-l-4 border-purple-500'
-                              : 'bg-gray-800'
-                          }`}
-                        >
-                          <div className="flex items-center gap-2 flex-1">
-                            <button
-                              onClick={(e) => handleToggleLectureCompletion(e, section.id, lecture.id)}
-                              className="flex-shrink-0 hover:bg-gray-600 rounded p-1 transition-colors"
-                              title={lecture.isCompleted ? 'Mark as incomplete' : 'Mark as complete'}
-                            >
-                              {lecture.isCompleted ? (
-                                <CheckCircle style={{ fontSize: '18px', color: '#10b981' }} />
-                              ) : (
-                                <CheckCircleOutline style={{ fontSize: '18px', color: '#6b7280' }} />
-                              )}
-                            </button>
-                            <span className="text-gray-300 text-sm flex-1">{lecture.title}</span>
-                          </div>
-                          <span className="text-gray-500 text-xs">{lecture.duration}</span>
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              ))}
+                {expandedSections.has(section.id) && (
+                  <div className="mt-2 space-y-1">
+                    {section.lecturesList.map((lecture) => (
+                      <button
+                        key={lecture.id}
+                        onClick={() => selectLecture(section, lecture)}
+                        className={`w-full flex items-center justify-between p-2 rounded hover:bg-gray-700 transition-colors text-left ${
+                          selectedLecture?.id === lecture.id && selectedSection?.id === section.id
+                            ? 'bg-gray-700 border-l-4 border-purple-500'
+                            : 'bg-gray-800'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2 flex-1">
+                          <button
+                            onClick={(e) => handleToggleLectureCompletion(e, section.id, lecture.id)}
+                            className="flex-shrink-0 hover:bg-gray-600 rounded p-1 transition-colors"
+                            title={lecture.isCompleted ? 'Mark as incomplete' : 'Mark as complete'}
+                          >
+                            {lecture.isCompleted ? (
+                              <CheckCircle style={{ fontSize: '18px', color: '#10b981' }} />
+                            ) : (
+                              <CheckCircleOutline style={{ fontSize: '18px', color: '#6b7280' }} />
+                            )}
+                          </button>
+                          <span className="text-gray-300 text-sm flex-1">{lecture.title}</span>
+                        </div>
+                        <span className="text-gray-500 text-xs">{lecture.duration}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))}
           </div>
         </div>
-
       </div>
     </div>
   );

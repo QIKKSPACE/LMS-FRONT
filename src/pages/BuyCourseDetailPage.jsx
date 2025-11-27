@@ -1,38 +1,120 @@
 /**
- * BuyCourseDetailPage Component
+ * BuyCourseDetailPage Component - UPDATED WITH FIRESTORE
  * 
  * Dynamic course detail page with banner, details, price, and Buy Now button
- * 
- * React Native Conversion Notes:
- * - Replace <div> with <View> from react-native
- * - Replace <img> with <Image> from react-native
- * - Replace <button> with <TouchableOpacity> from react-native
- * - Use ScrollView for scrollable content
- * - Use SafeAreaView for mobile safe areas
  */
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { ArrowBack, ShoppingCart } from '@mui/icons-material';
-import { courses } from '../data/courses';
+import { getCourseById, enrollInCourse } from '../services/courseService';
+import { useAuth } from '../context/AuthContext';
+import toast from 'react-hot-toast';
 
 const BuyCourseDetailPage = ({ courseId, onBack, onPurchase }) => {
-  const course = courses.find((c) => c.id === courseId);
+  const { user } = useAuth();
+  const [course, setCourse] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [purchasing, setPurchasing] = useState(false);
 
-  if (!course) {
+  // Fetch course from Firestore
+  useEffect(() => {
+    const fetchCourse = async () => {
+      try {
+        setLoading(true);
+        const courseData = await getCourseById(courseId);
+        
+        if (courseData) {
+          setCourse(courseData);
+        } else {
+          console.error('Course not found in Firestore');
+          toast.error('Course not found');
+        }
+      } catch (error) {
+        console.error('Error fetching course:', error);
+        toast.error('Failed to load course');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    if (courseId) {
+      fetchCourse();
+    }
+  }, [courseId]);
+
+  const handleBuyNow = async () => {
+    if (!user) {
+      toast.error('Please login to purchase this course');
+      return;
+    }
+
+    if (purchasing) return;
+
+    try {
+      setPurchasing(true);
+      
+      // Set expiry date (1 year from now)
+      const expiryDate = new Date();
+      expiryDate.setFullYear(expiryDate.getFullYear() + 1);
+      const expiryDateStr = expiryDate.toISOString().split('T')[0]; // YYYY-MM-DD
+
+      // Enroll user in course
+      const result = await enrollInCourse(user.uid, courseId, expiryDateStr);
+
+      if (result.success) {
+        toast.success('🎉 Course purchased successfully!');
+        
+        // Wait a bit for user to see the success message
+        setTimeout(() => {
+          // Call the onPurchase callback if provided
+          if (onPurchase) {
+            onPurchase(courseId);
+          }
+          // Go back to previous page
+          onBack();
+        }, 1500);
+      } else {
+        toast.error(result.error || 'Failed to purchase course');
+      }
+    } catch (error) {
+      console.error('Purchase error:', error);
+      toast.error('An error occurred during purchase');
+    } finally {
+      setPurchasing(false);
+    }
+  };
+
+  // Loading state
+  if (loading) {
     return (
-      <div className="flex items-center justify-center h-screen">
-        <p className="text-gray-500">Course not found</p>
+      <div className="flex items-center justify-center h-screen bg-gradient-to-br from-gray-50 via-white to-gray-100">
+        <div className="text-center">
+          <div className="w-16 h-16 border-4 border-red-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-gray-600 font-medium">Loading course...</p>
+        </div>
       </div>
     );
   }
 
-  const handleBuyNow = () => {
-    if (onPurchase) {
-      onPurchase(course.id);
-    } else {
-      console.log('Purchase course:', course.id);
-      // Add purchase logic here
-    }
-  };
+  // Course not found
+  if (!course) {
+    return (
+      <div className="flex flex-col items-center justify-center h-screen bg-gradient-to-br from-gray-50 via-white to-gray-100">
+        <div className="text-center">
+          <div className="w-24 h-24 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+            <span className="text-red-600 text-4xl">❌</span>
+          </div>
+          <h2 className="text-2xl font-bold text-gray-900 mb-2">Course Not Found</h2>
+          <p className="text-gray-600 mb-6">The course you're looking for doesn't exist.</p>
+          <button
+            onClick={onBack}
+            className="px-6 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
+          >
+            Go Back
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-100">
@@ -76,6 +158,11 @@ const BuyCourseDetailPage = ({ courseId, onBack, onPurchase }) => {
             <h2 className="text-4xl lg:text-6xl font-extrabold drop-shadow-2xl mb-2">
               {course.title}
             </h2>
+            {course.membershipType && (
+              <span className="inline-block bg-red-600 text-white px-4 py-2 rounded-full text-sm font-semibold">
+                {course.membershipType}
+              </span>
+            )}
           </div>
         </div>
       </div>
@@ -86,13 +173,41 @@ const BuyCourseDetailPage = ({ courseId, onBack, onPurchase }) => {
           {/* Course Description */}
           <div className="bg-white/95 backdrop-blur-sm rounded-2xl border border-gray-200/50 shadow-xl p-8 mb-6">
             <h3 className="text-2xl font-extrabold bg-gradient-to-r from-gray-900 to-gray-700 bg-clip-text text-transparent mb-6">About This Course</h3>
-            <p className="text-gray-700 leading-relaxed text-lg mb-6">
-              {course.title} is a comprehensive course designed to help you master the fundamentals
-              and advanced concepts. This course includes {course.chapters} detailed chapters covering
-              all aspects of the subject matter. Whether you're a beginner or looking to enhance your
-              skills, this course provides the knowledge and tools you need to succeed.
-            </p>
+            
+            {/* Description */}
+            <div 
+              className="text-gray-700 leading-relaxed text-lg mb-6"
+              dangerouslySetInnerHTML={{ __html: course.description }}
+            />
+
+            {/* Course Info */}
             <div className="mt-6 pt-6 border-t border-gray-200/50">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                <div className="flex items-center space-x-3">
+                  <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center">
+                    <span className="text-red-600 text-xl">📚</span>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-500">Total Chapters</p>
+                    <p className="text-lg font-bold text-gray-900">{course.chapters} Chapters</p>
+                  </div>
+                </div>
+
+                {course.sections && course.sections.length > 0 && (
+                  <div className="flex items-center space-x-3">
+                    <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center">
+                      <span className="text-blue-600 text-xl">🎥</span>
+                    </div>
+                    <div>
+                      <p className="text-sm text-gray-500">Total Lectures</p>
+                      <p className="text-lg font-bold text-gray-900">
+                        {course.sections.reduce((sum, section) => sum + (section.lectures || 0), 0)} Lectures
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </div>
+
               <h4 className="font-bold text-gray-900 mb-4 text-lg">What you'll learn:</h4>
               <ul className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <li className="flex items-start space-x-3">
@@ -124,14 +239,38 @@ const BuyCourseDetailPage = ({ courseId, onBack, onPurchase }) => {
               <div className="flex flex-col lg:flex-row items-center justify-between gap-6">
                 <div>
                   <p className="text-sm text-gray-500 mb-2 font-medium">Total Price</p>
-                  <p className="text-4xl font-extrabold bg-gradient-to-r from-gray-900 to-gray-700 bg-clip-text text-transparent">₹{course.price}</p>
+                  <div className="flex items-baseline gap-3">
+                    <p className="text-4xl font-extrabold bg-gradient-to-r from-gray-900 to-gray-700 bg-clip-text text-transparent">
+                      ₹{course.price}
+                    </p>
+                    {course.discount > 0 && (
+                      <div className="flex flex-col">
+                        <span className="text-sm text-gray-500 line-through">
+                          ₹{Math.round(course.price / (1 - course.discount / 100))}
+                        </span>
+                        <span className="text-xs text-green-600 font-semibold">
+                          Save {course.discount}%
+                        </span>
+                      </div>
+                    )}
+                  </div>
                 </div>
                 <button
                   onClick={handleBuyNow}
-                  className="w-full lg:w-auto bg-gradient-to-r from-red-600 to-red-700 text-white px-10 py-4 rounded-xl text-lg font-bold hover:from-red-700 hover:to-red-800 transition-all duration-300 flex items-center justify-center gap-3 hover:scale-105 transform"
+                  disabled={purchasing}
+                  className="w-full lg:w-auto bg-gradient-to-r from-red-600 to-red-700 text-white px-10 py-4 rounded-xl text-lg font-bold hover:from-red-700 hover:to-red-800 transition-all duration-300 flex items-center justify-center gap-3 hover:scale-105 transform disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
                 >
-                  <ShoppingCart style={{ fontSize: '22px' }} />
-                  Buy Now
+                  {purchasing ? (
+                    <>
+                      <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                      Processing...
+                    </>
+                  ) : (
+                    <>
+                      <ShoppingCart style={{ fontSize: '22px' }} />
+                      Buy Now
+                    </>
+                  )}
                 </button>
               </div>
             </div>
@@ -158,4 +297,3 @@ const BuyCourseDetailPage = ({ courseId, onBack, onPurchase }) => {
 };
 
 export default BuyCourseDetailPage;
-

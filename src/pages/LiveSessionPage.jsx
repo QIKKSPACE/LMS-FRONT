@@ -1,22 +1,65 @@
-/**
- * LiveSessionPage Component
- * 
- * Displays all live sessions available to users
- * 
- * React Native Conversion Notes:
- * - Replace <div> with <View> from react-native
- * - Use ScrollView or FlatList for session list
- * - flex-col → flexDirection: 'column'
- * - grid → Use FlatList with numColumns prop for grid layout
- * - px-4, py-4 → paddingHorizontal, paddingVertical
- * - mb-20 → marginBottom for bottom nav spacing
- * - Use SafeAreaView for mobile safe areas
- */
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
+import { collection, getDocs } from 'firebase/firestore';
+import { db } from '../firebase';
 import logo from '../assets/logo.png';
 
 const LiveSessionPage = () => {
+  const [liveSessions, setLiveSessions] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  // Fetch live sessions from all courses
+  useEffect(() => {
+    const fetchLiveSessions = async () => {
+      try {
+        setLoading(true);
+        const coursesRef = collection(db, 'courses');
+        const snapshot = await getDocs(coursesRef);
+        
+        const allSessions = [];
+        
+        // Loop through all courses and extract live lectures
+        snapshot.docs.forEach(doc => {
+          const courseData = doc.data();
+          
+          if (courseData.liveLectures && Array.isArray(courseData.liveLectures)) {
+            courseData.liveLectures.forEach((lecture, index) => {
+              allSessions.push({
+                id: `${doc.id}_${index}`,
+                courseId: doc.id,
+                courseTitle: courseData.courseTitle,
+                link: lecture.link,
+                status: lecture.status || 'upcoming',
+                date: lecture.date,
+                time: lecture.time,
+                // Extract topic from course title or use default
+                topic: courseData.courseTitle || 'General Topic'
+              });
+            });
+          }
+        });
+
+        // Sort by date (most recent first)
+        allSessions.sort((a, b) => {
+          const dateA = new Date(a.date);
+          const dateB = new Date(b.date);
+          return dateB - dateA;
+        });
+
+        setLiveSessions(allSessions);
+        setError(null);
+      } catch (err) {
+        console.error('Error fetching live sessions:', err);
+        setError('Failed to load live sessions. Please try again.');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchLiveSessions();
+  }, []);
+
   // Helper function to format date
   const formatDate = (dateString) => {
     const date = new Date(dateString);
@@ -27,50 +70,51 @@ const LiveSessionPage = () => {
     };
   };
 
-  // Dummy live session data
-  const liveSessions = [
-    {
-      id: 1,
-      title: "Boot Camp",
-      topic: "Video Editing",
-      date: "2024-10-25",
-      time: "11:00 AM - 12:00 PM",
-      status: "upcoming",
-      organizer: "Digital Changemakers Academy",
-      isLive: false
-    },
-    {
-      id: 2,
-      title: "Live Workshop",
-      topic: "Web Development",
-      date: "2024-10-20",
-      time: "2:00 PM - 4:00 PM",
-      status: "upcoming",
-      organizer: "Digital Changemakers Academy",
-      isLive: false
-    },
-    {
-      id: 3,
-      title: "Boot Camp",
-      topic: "React Fundamentals",
-      date: "2024-10-18",
-      time: "3:00 PM - 4:30 PM",
-      status: "live",
-      organizer: "Digital Changemakers Academy",
-      isLive: true
-    },
-    {
-      id: 4,
-      title: "Live Session",
-      topic: "Design Patterns",
-      date: "2024-10-22",
-      time: "11:00 AM - 12:00 PM",
-      status: "upcoming",
-      organizer: "Digital Changemakers Academy",
-      isLive: false
+  // Helper function to get status color
+  const getStatusColor = (status) => {
+    switch (status.toLowerCase()) {
+      case 'live':
+        return 'bg-red-500';
+      case 'upcoming':
+        return 'bg-blue-500';
+      case 'completed':
+        return 'bg-gray-500';
+      default:
+        return 'bg-blue-500';
     }
-  ];
+  };
 
+  // Loading state
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-screen bg-gradient-to-br from-gray-50 via-white to-gray-100">
+        <div className="text-center">
+          <div className="w-16 h-16 border-4 border-red-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-gray-600 font-medium">Loading live sessions...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Error state
+  if (error) {
+    return (
+      <div className="flex items-center justify-center h-screen bg-gradient-to-br from-gray-50 via-white to-gray-100">
+        <div className="text-center">
+          <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+            <span className="text-red-600 text-2xl">⚠️</span>
+          </div>
+          <p className="text-red-600 font-medium">{error}</p>
+          <button 
+            onClick={() => window.location.reload()} 
+            className="mt-4 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700"
+          >
+            Retry
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-100">
@@ -80,7 +124,15 @@ const LiveSessionPage = () => {
           <h1 className="text-2xl font-bold bg-gradient-to-r from-gray-900 to-gray-700 bg-clip-text text-transparent">
             Live Sessions
           </h1>
+          <img 
+            src={logo} 
+            alt="Spiritual Talk Foundation Logo" 
+            className="h-10 w-10 object-contain rounded-full"
+          />
         </div>
+        <p className="px-4 pb-4 text-sm text-gray-600">
+          Join live sessions and interact with instructors in real-time
+        </p>
       </div>
 
       {/* Desktop Header */}
@@ -96,9 +148,20 @@ const LiveSessionPage = () => {
       {/* Live Sessions List */}
       <div className="flex-1 px-6 lg:px-8 py-6 lg:py-8 pb-24 lg:pb-6">
         {liveSessions.length === 0 ? (
-          <div className="flex items-center justify-center h-64">
-            <p className="text-gray-500">No live sessions scheduled</p>
-          </div>
+          <motion.div 
+            className="flex flex-col items-center justify-center h-64"
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ duration: 0.5 }}
+          >
+            <motion.div
+              className="w-24 h-24 bg-gradient-to-br from-gray-200 to-gray-300 rounded-full flex items-center justify-center mb-4"
+            >
+              <span className="text-4xl">📹</span>
+            </motion.div>
+            <p className="text-gray-500 text-lg font-semibold">No live sessions scheduled</p>
+            <p className="text-gray-400 text-sm mt-2">Check back later for upcoming sessions</p>
+          </motion.div>
         ) : (
           <motion.div 
             className="lg:grid lg:grid-cols-2 xl:grid-cols-3 lg:gap-6 space-y-4 lg:space-y-0"
@@ -114,6 +177,8 @@ const LiveSessionPage = () => {
           >
             {liveSessions.map((session, index) => {
               const dateInfo = formatDate(session.date);
+              const statusColor = getStatusColor(session.status);
+              
               return (
                 <motion.div
                   key={session.id}
@@ -124,7 +189,8 @@ const LiveSessionPage = () => {
                     duration: 0.5,
                     ease: "easeOut"
                   }}
-                  className="bg-white rounded-lg shadow-md hover:shadow-xl transition-all duration-300 overflow-hidden border border-gray-200/50 cursor-pointer"
+                  className="bg-white rounded-xl shadow-lg hover:shadow-2xl transition-all duration-300 overflow-hidden border border-gray-200/50 cursor-pointer group"
+                  whileHover={{ y: -5 }}
                 >
                   {/* Top Section - Red Gradient Banner */}
                   <div 
@@ -134,23 +200,38 @@ const LiveSessionPage = () => {
                       backgroundSize: '32px 32px'
                     }}
                   >
-                    {/* Logo - Top Right */}
+                    {/* Status Badge */}
                     <div className="absolute top-4 right-4">
-                      <img 
-                        src={logo} 
-                        alt="Logo" 
-                        className="h-8 w-auto object-contain"
-                        style={{ filter: 'brightness(0) invert(1)' }}
-                      />
+                      <span className={`${statusColor} text-white px-3 py-1 rounded-full text-xs font-bold uppercase`}>
+                        {session.status}
+                      </span>
                     </div>
+
+                    {/* Live Indicator (if live) */}
+                    {session.status.toLowerCase() === 'live' && (
+                      <motion.div
+                        className="absolute top-4 left-4 flex items-center gap-2"
+                        animate={{
+                          opacity: [1, 0.5, 1]
+                        }}
+                        transition={{
+                          duration: 1.5,
+                          repeat: Infinity,
+                          ease: "easeInOut"
+                        }}
+                      >
+                        <div className="w-3 h-3 bg-white rounded-full"></div>
+                        <span className="text-white text-sm font-bold">LIVE NOW</span>
+                      </motion.div>
+                    )}
 
                     {/* Title and Topic */}
                     <div className="mt-12">
-                      <h3 className="text-3xl lg:text-4xl font-extrabold mb-3 leading-tight">
-                        {session.title}
+                      <h3 className="text-2xl lg:text-3xl font-extrabold mb-2 leading-tight">
+                        Live Session
                       </h3>
                       <p className="text-white/95 text-base lg:text-lg font-medium">
-                        Topic : {session.topic}
+                        {session.topic}
                       </p>
                     </div>
                   </div>
@@ -167,16 +248,53 @@ const LiveSessionPage = () => {
 
                       {/* Time */}
                       <div className="flex-1">
-                        <p className="text-gray-900 font-medium text-sm lg:text-base">
+                        <p className="text-gray-900 font-semibold text-sm lg:text-base flex items-center gap-2">
+                          <span className="text-lg">🕐</span>
                           {session.time}
+                        </p>
+                        <p className="text-gray-500 text-xs mt-1">
+                          {session.date}
                         </p>
                       </div>
                     </div>
 
-                    {/* Session Title */}
-                    <h4 className="text-lg lg:text-xl font-bold text-gray-900">
-                      {session.title} : Topic: {session.topic}
-                    </h4>
+                    {/* Course Title */}
+                    <div className="mb-4 pb-4 border-b border-gray-100">
+                      <p className="text-xs text-gray-500 mb-1">From Course:</p>
+                      <h4 className="text-sm font-bold text-gray-900 line-clamp-2">
+                        {session.courseTitle}
+                      </h4>
+                    </div>
+
+                    {/* Join Button */}
+                    <a 
+                      href={session.link} 
+                      target="_blank" 
+                      rel="noopener noreferrer"
+                      className="block"
+                    >
+                      <motion.button
+                        className={`w-full py-3 rounded-lg text-white font-bold text-sm transition-all duration-300 ${
+                          session.status.toLowerCase() === 'live' 
+                            ? 'bg-gradient-to-r from-red-600 to-red-700 hover:from-red-700 hover:to-red-800' 
+                            : 'bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800'
+                        }`}
+                        whileHover={{ scale: 1.02 }}
+                        whileTap={{ scale: 0.98 }}
+                      >
+                        {session.status.toLowerCase() === 'live' ? (
+                          <span className="flex items-center justify-center gap-2">
+                            <span className="text-lg">🔴</span>
+                            Join Live Now
+                          </span>
+                        ) : (
+                          <span className="flex items-center justify-center gap-2">
+                            <span className="text-lg">📹</span>
+                            Join Session
+                          </span>
+                        )}
+                      </motion.button>
+                    </a>
                   </div>
                 </motion.div>
               );
@@ -189,4 +307,3 @@ const LiveSessionPage = () => {
 };
 
 export default LiveSessionPage;
-
