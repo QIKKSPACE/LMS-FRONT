@@ -1,13 +1,4 @@
-/**
- * ProgressBar React Native Version
- * 
- * Usage:
- * import { View, StyleSheet } from 'react-native';
- * 
- * This shows how the ProgressBar component converts to React Native.
- */
-
-import React from 'react';
+ import React from 'react';
 import { View, StyleSheet } from 'react-native';
 
 const ProgressBarNative = ({ progress = 0, height = 2 }) => {

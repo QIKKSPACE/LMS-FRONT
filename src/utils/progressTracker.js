@@ -1,17 +1,21 @@
-// src/utils/progressTracker.js
+// src/utils/progressTracker.js - FIXED PROGRESS CALCULATION
 
 /**
- * Initialize course progress for a user
- * Merges saved progress with course structure
+ * ✅ FIXED: Initialize course progress with correct calculation
  */
 export const initializeCourseProgress = (courseData, savedProgress) => {
   try {
-    console.log('Initializing course progress...');
-    console.log('Course data:', courseData);
-    console.log('Saved progress:', savedProgress);
+    console.log('🔄 Initializing course progress...');
+    console.log('📦 Course data:', {
+      id: courseData.id,
+      title: courseData.courseTitle,
+      sections: courseData.sections?.length || 0
+    });
+    console.log('💾 Saved progress:', savedProgress);
 
     // If no sections, return course as is
     if (!courseData.sections || courseData.sections.length === 0) {
+      console.warn('⚠️ No sections found in course');
       return {
         ...courseData,
         progress: savedProgress?.progress || 0,
@@ -21,7 +25,7 @@ export const initializeCourseProgress = (courseData, savedProgress) => {
 
     // Get completed lectures from saved progress
     const completedLectures = savedProgress?.completedLectures || [];
-    console.log('Completed lectures:', completedLectures);
+    console.log('✅ Completed lectures:', completedLectures);
 
     // Initialize sections with lecture completion status
     const sectionsWithProgress = courseData.sections.map(section => {
@@ -46,13 +50,17 @@ export const initializeCourseProgress = (courseData, savedProgress) => {
       };
     });
 
-    // Calculate overall progress
+    // ✅ CRITICAL: Calculate total lectures correctly
     const totalLectures = sectionsWithProgress.reduce((sum, section) => 
       sum + (section.lecturesList?.length || 0), 0
     );
     
     const totalCompleted = completedLectures.length;
-    const progress = totalLectures > 0 ? Math.round((totalCompleted / totalLectures) * 100) : 0;
+    
+    // ✅ CRITICAL: Ensure we don't divide by zero
+    const progress = totalLectures > 0 
+      ? Math.round((totalCompleted / totalLectures) * 100) 
+      : 0;
 
     // Determine status
     let status = 'IN_PROGRESS';
@@ -62,16 +70,24 @@ export const initializeCourseProgress = (courseData, savedProgress) => {
       status = 'NOT_STARTED';
     }
 
-    console.log('Course initialized with progress:', progress);
+    console.log('📊 Progress calculation:', {
+      totalLectures,
+      totalCompleted,
+      progress: progress + '%',
+      status
+    });
+
+    console.log('✅ Course initialized with progress:', progress + '%');
 
     return {
       ...courseData,
       sections: sectionsWithProgress,
       progress: progress,
-      status: status
+      status: status,
+      totalLectures: totalLectures // Add this for reference
     };
   } catch (error) {
-    console.error('Error initializing course progress:', error);
+    console.error('❌ Error initializing course progress:', error);
     return {
       ...courseData,
       progress: 0,
@@ -81,13 +97,14 @@ export const initializeCourseProgress = (courseData, savedProgress) => {
 };
 
 /**
- * Toggle lecture completion and recalculate progress
+ * ✅ FIXED: Toggle lecture completion with correct recalculation
  */
 export const toggleLectureCompletion = (course, sectionId, lectureId) => {
   try {
-    console.log('Toggling lecture:', sectionId, lectureId);
+    console.log('🔄 Toggling lecture:', sectionId, lectureId);
 
     if (!course.sections) {
+      console.warn('⚠️ No sections in course');
       return course;
     }
 
@@ -107,6 +124,8 @@ export const toggleLectureCompletion = (course, sectionId, lectureId) => {
           return lecture;
         }
 
+        console.log(`${lecture.isCompleted ? '➖ Unmarking' : '✅ Marking'} lecture: ${lecture.title}`);
+
         return {
           ...lecture,
           isCompleted: !lecture.isCompleted
@@ -123,7 +142,7 @@ export const toggleLectureCompletion = (course, sectionId, lectureId) => {
       };
     });
 
-    // Recalculate overall progress
+    // ✅ CRITICAL: Recalculate overall progress
     const totalLectures = updatedSections.reduce((sum, section) => 
       sum + (section.lecturesList?.length || 0), 0
     );
@@ -132,26 +151,36 @@ export const toggleLectureCompletion = (course, sectionId, lectureId) => {
       sum + (section.lecturesList?.filter(l => l.isCompleted).length || 0), 0
     );
     
-    const progress = totalLectures > 0 ? Math.round((totalCompleted / totalLectures) * 100) : 0;
+    // ✅ CRITICAL: Ensure we don't divide by zero
+    const progress = totalLectures > 0 
+      ? Math.round((totalCompleted / totalLectures) * 100) 
+      : 0;
 
     // Determine status
     let status = 'IN_PROGRESS';
     if (progress === 100) {
       status = 'COMPLETED';
+      console.log('🎉 COURSE COMPLETED!');
     } else if (progress === 0) {
       status = 'NOT_STARTED';
     }
 
-    console.log('New progress:', progress);
+    console.log('📊 Updated progress:', {
+      totalLectures,
+      totalCompleted,
+      progress: progress + '%',
+      status
+    });
 
     return {
       ...course,
       sections: updatedSections,
       progress: progress,
-      status: status
+      status: status,
+      totalLectures: totalLectures
     };
   } catch (error) {
-    console.error('Error toggling lecture:', error);
+    console.error('❌ Error toggling lecture:', error);
     return course;
   }
 };
@@ -182,13 +211,14 @@ export const saveProgress = (courseId, courseData) => {
       progress: courseData.progress || 0,
       status: courseData.status || 'IN_PROGRESS',
       completedLectures: completedLectures,
+      totalLectures: courseData.totalLectures || 0,
       lastUpdated: new Date().toISOString()
     };
 
     localStorage.setItem(progressKey, JSON.stringify(progressData));
-    console.log('Progress saved to localStorage');
+    console.log('💾 Progress saved to localStorage');
   } catch (error) {
-    console.error('Error saving progress:', error);
+    console.error('❌ Error saving progress:', error);
   }
 };
 
@@ -202,13 +232,13 @@ export const loadProgress = (courseId) => {
     
     if (savedData) {
       const progress = JSON.parse(savedData);
-      console.log('Progress loaded from localStorage:', progress);
+      console.log('📂 Progress loaded from localStorage:', progress);
       return progress;
     }
     
     return null;
   } catch (error) {
-    console.error('Error loading progress:', error);
+    console.error('❌ Error loading progress:', error);
     return null;
   }
 };

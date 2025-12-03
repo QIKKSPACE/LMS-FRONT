@@ -1,4 +1,4 @@
-// src/services/courseService.js - FIXED WITH CORRECT FIRESTORE FIELD MAPPING
+// src/services/courseService.js - FIXED PROGRESS TRACKING
 import { 
   collection, 
   getDocs, 
@@ -15,15 +15,15 @@ import {
 import { db } from "../firebase";
 
 /**
- * Transform Firestore course data to match app structure
- * ✅ FIXED: Maps exact Firestore field names from your database
+ * ✅ FIXED: Transform Firestore course data with correct lecture counting
  */
 const transformCourseData = (courseId, firestoreData) => {
-  console.log('🔄 Transforming course data for:', courseId);
+  console.log('📄 Transforming course data for:', courseId);
   console.log('📦 Raw Firestore data:', firestoreData);
   
   // ✅ Extract sections from courseContent array
   let sections = [];
+  let totalLecturesCount = 0; // Track total lectures correctly
   
   if (firestoreData.courseContent && Array.isArray(firestoreData.courseContent)) {
     console.log('✅ Found courseContent with', firestoreData.courseContent.length, 'chapters');
@@ -42,6 +42,9 @@ const transformCourseData = (courseId, firestoreData) => {
           }))
         : [];
       
+      // ✅ CRITICAL: Add to total lecture count
+      totalLecturesCount += lecturesList.length;
+      
       return {
         id: chapter.chapterId || `ch_${Date.now()}_${index}`,
         title: chapter.chapterTitle || `Section ${index + 1}`,
@@ -55,23 +58,18 @@ const transformCourseData = (courseId, firestoreData) => {
   }
   
   console.log('✅ Transformed sections:', sections.length, 'sections');
+  console.log('📊 Total lectures across all sections:', totalLecturesCount);
   
-  // Calculate totals
-  const totalChapters = sections.length;
-  const totalLectures = sections.reduce((sum, section) => sum + (section.lectures || 0), 0);
-  
-  console.log(`📊 Total: ${totalChapters} chapters, ${totalLectures} lectures`);
-  
-  // ✅ Return transformed course with exact Firestore field mapping
+  // ✅ Return transformed course with correct totalLectures
   return {
     id: courseId,
     
-    // Basic Info - map from Firestore fields
+    // Basic Info
     title: firestoreData.courseTitle || 'Untitled Course',
     courseTitle: firestoreData.courseTitle,
     courseName: firestoreData.courseTitle,
     
-    // Thumbnail - from courseThumbnail field
+    // Thumbnail
     thumbnail: firestoreData.courseThumbnail || 'https://via.placeholder.com/800x400?text=Course',
     courseThumbnail: firestoreData.courseThumbnail,
     thumbnailUrl: firestoreData.courseThumbnail,
@@ -93,8 +91,8 @@ const transformCourseData = (courseId, firestoreData) => {
     
     // Content Structure
     sections: sections,
-    chapters: totalChapters,
-    totalLectures: totalLectures,
+    chapters: sections.length,
+    totalLectures: totalLecturesCount, // ✅ FIXED: Use correct count
     
     // Live Lectures
     liveLectures: firestoreData.liveLectures || [],
@@ -131,8 +129,7 @@ export const getAllCourses = async () => {
       console.log('📦 Sample course:', {
         id: courses[0].id,
         title: courses[0].courseTitle,
-        thumbnail: courses[0].courseThumbnail,
-        price: courses[0].price,
+        totalLectures: courses[0].totalLectures,
         chapters: courses[0].chapters
       });
     }
@@ -165,6 +162,7 @@ export const getCourseById = async (courseId) => {
       console.log('📸 Thumbnail URL:', courseData.courseThumbnail);
       console.log('💰 Price:', courseData.price);
       console.log('📚 Sections:', courseData.sections?.length || 0);
+      console.log('🎓 Total Lectures:', courseData.totalLectures);
       
       return {
         success: true,
@@ -183,6 +181,250 @@ export const getCourseById = async (courseId) => {
       success: false,
       error: "Failed to fetch course"
     };
+  }
+};
+
+/**
+ * ✅ FIXED: Get course progress with correct calculation
+ */
+export const getCourseProgress = async (userId, courseId) => {
+  try {
+    const progressId = `${userId}_${courseId}`;
+    const progressRef = doc(db, 'userCourseProgress', progressId);
+    const progressSnap = await getDoc(progressRef);
+
+    if (progressSnap.exists()) {
+      const progressData = progressSnap.data();
+      
+      console.log('📊 Found saved progress:', {
+        progress: progressData.progress,
+        completedLectures: progressData.completedLectures?.length || 0,
+        totalLectures: progressData.totalLectures,
+        status: progressData.status
+      });
+      
+      return { 
+        success: true, 
+        progress: {
+          ...progressData,
+          enrolledAt: progressData.enrolledAt || null,
+          lastAccessedAt: progressData.lastAccessedAt || null,
+          expiryDate: progressData.expiryDate || null,
+        }
+      };
+    }
+
+    console.log('⚠️ No progress found for:', progressId);
+    return { success: false, progress: null };
+  } catch (error) {
+    console.error('❌ Error getting course progress:', error);
+    return { success: false, error: error.message, progress: null };
+  }
+};
+
+/**
+ * ✅ FIXED: Toggle lecture completion with correct progress calculation
+ */
+export const toggleLectureCompletion = async (userId, courseId, sectionId, lectureId) => {
+  try {
+    console.log('🔄 Toggling lecture completion:', { userId, courseId, sectionId, lectureId });
+
+    const progressId = `${userId}_${courseId}`;
+    const progressRef = doc(db, 'userCourseProgress', progressId);
+    const progressSnap = await getDoc(progressRef);
+
+    if (!progressSnap.exists()) {
+      console.log('⚠️ Progress document not found, creating new one');
+      
+      // Get course to calculate total lectures
+      const courseResult = await getCourseById(courseId);
+      
+      if (!courseResult.success) {
+        return { success: false, error: 'Course not found' };
+      }
+      
+      // ✅ CRITICAL: Use the correct totalLectures from transformed course
+      const totalLectures = courseResult.course.totalLectures || 0;
+      
+      if (totalLectures === 0) {
+        console.error('❌ Course has 0 total lectures! Cannot create progress.');
+        return { success: false, error: 'Course has no lectures' };
+      }
+      
+      console.log('📊 Creating progress with totalLectures:', totalLectures);
+      
+      const initialProgress = totalLectures > 0 ? Math.round((1 / totalLectures) * 100) : 0;
+      
+      await setDoc(progressRef, {
+        progressId,
+        userId,
+        courseId,
+        progress: initialProgress,
+        status: 'IN_PROGRESS',
+        completedLectures: [`${sectionId}_${lectureId}`],
+        totalLectures: totalLectures,
+        enrolledAt: new Date().toISOString(),
+        lastAccessedAt: new Date().toISOString(),
+      });
+      
+      console.log('✅ Progress document created with progress:', initialProgress + '%');
+      return { success: true };
+    }
+
+    const progressData = progressSnap.data();
+    const completedLectures = progressData.completedLectures || [];
+    const lectureKey = `${sectionId}_${lectureId}`;
+
+    console.log('📋 Current completed lectures:', completedLectures);
+    console.log('🎯 Total lectures in course:', progressData.totalLectures);
+
+    // ✅ CRITICAL FIX: If totalLectures is 0 or invalid, recalculate from course
+    let totalLectures = progressData.totalLectures || 0;
+    
+    if (totalLectures === 0) {
+      console.warn('⚠️ totalLectures is 0! Recalculating from course...');
+      
+      const courseResult = await getCourseById(courseId);
+      if (courseResult.success && courseResult.course.totalLectures > 0) {
+        totalLectures = courseResult.course.totalLectures;
+        console.log('✅ Recalculated totalLectures:', totalLectures);
+        
+        // Update the progress document with correct totalLectures
+        await updateDoc(progressRef, {
+          totalLectures: totalLectures
+        });
+      } else {
+        console.error('❌ Cannot recalculate totalLectures! Course may be invalid.');
+        return { success: false, error: 'Invalid course structure' };
+      }
+    }
+
+    // Toggle completion
+    let updatedLectures;
+    if (completedLectures.includes(lectureKey)) {
+      // Remove from completed
+      updatedLectures = completedLectures.filter(l => l !== lectureKey);
+      console.log('➖ Unmarking lecture as complete');
+    } else {
+      // Add to completed
+      updatedLectures = [...completedLectures, lectureKey];
+      console.log('✅ Marking lecture as complete');
+    }
+
+    // ✅ Calculate progress percentage
+    const progress = Math.round((updatedLectures.length / totalLectures) * 100);
+    
+    // Determine status
+    let status = 'IN_PROGRESS';
+    if (progress === 100) {
+      status = 'COMPLETED';
+      console.log('🎉 COURSE COMPLETED!');
+    } else if (progress === 0) {
+      status = 'NOT_STARTED';
+    }
+
+    console.log('📊 New progress calculation:', {
+      completedLectures: updatedLectures.length,
+      totalLectures: totalLectures,
+      progress: progress + '%',
+      status: status
+    });
+
+    // Update Firestore
+    await updateDoc(progressRef, {
+      completedLectures: updatedLectures,
+      progress: progress,
+      status: status,
+      totalLectures: totalLectures, // ✅ Also update totalLectures in case it was recalculated
+      lastAccessedAt: new Date().toISOString(),
+    });
+
+    console.log('✅ Lecture completion toggled successfully');
+    console.log('📈 Course progress is now:', progress + '%');
+    
+    return { success: true };
+  } catch (error) {
+    console.error('❌ Error toggling lecture completion:', error);
+    return { success: false, error: error.message };
+  }
+};
+
+/**
+ * ✅ FIXED: Enroll user with correct totalLectures count
+ */
+export const enrollInCourse = async (userId, courseId, expiryDate = null) => {
+  try {
+    console.log('📝 Enrolling user in course:', { userId, courseId, expiryDate });
+    
+    // Get course to calculate total lectures
+    const courseResult = await getCourseById(courseId);
+    if (!courseResult.success) {
+      return { success: false, error: 'Course not found' };
+    }
+    
+    // ✅ CRITICAL: Use correct totalLectures from transformed course
+    const totalLectures = courseResult.course.totalLectures || 0;
+    
+    console.log('📊 Course has', totalLectures, 'total lectures');
+    
+    // Get current user data
+    const userRef = doc(db, 'users', userId);
+    const userSnap = await getDoc(userRef);
+    
+    if (!userSnap.exists()) {
+      return { success: false, error: 'User not found' };
+    }
+    
+    const userData = userSnap.data();
+    const currentPurchasedCourses = userData.purchasedCourses || [];
+    
+    // Check if already purchased
+    if (currentPurchasedCourses.includes(courseId)) {
+      console.log('⚠️ User already owns this course');
+      return { success: true, alreadyPurchased: true };
+    }
+    
+    // Add course to user's purchased courses
+    const updatedPurchasedCourses = [...currentPurchasedCourses, courseId];
+    
+    await updateDoc(userRef, {
+      purchasedCourses: updatedPurchasedCourses,
+      updatedAt: new Date().toISOString()
+    });
+    
+    console.log('✅ Course added to user purchases:', updatedPurchasedCourses);
+    
+    // Create progress document with CORRECT totalLectures
+    const progressId = `${userId}_${courseId}`;
+    const progressRef = doc(db, 'userCourseProgress', progressId);
+    
+    await setDoc(progressRef, {
+      progressId,
+      userId,
+      courseId,
+      progress: 0,
+      status: 'IN_PROGRESS',
+      completedLectures: [],
+      totalLectures: totalLectures, // ✅ FIXED: Use correct count
+      enrolledAt: new Date().toISOString(),
+      lastAccessedAt: new Date().toISOString(),
+      expiryDate: expiryDate,
+    });
+    
+    console.log('✅ Course progress initialized with totalLectures:', totalLectures);
+    
+    // Return updated user data
+    return { 
+      success: true,
+      updatedUser: {
+        ...userData,
+        purchasedCourses: updatedPurchasedCourses,
+        updatedAt: new Date().toISOString()
+      }
+    };
+  } catch (error) {
+    console.error('❌ Error enrolling user:', error);
+    return { success: false, error: error.message };
   }
 };
 
@@ -229,9 +471,12 @@ export const getUserCourses = async (userId) => {
             expiryDate: progressResult.progress.expiryDate || null,
             isPurchased: true,
           };
+          
+          console.log(`✅ Course ${courseId}: ${courseWithProgress.progress}% (${courseWithProgress.status})`);
           courses.push(courseWithProgress);
         } else {
           // No progress yet, add with defaults
+          console.log(`⚠️ No progress for course ${courseId}, using defaults`);
           courses.push({
             ...result.course,
             progress: 0,
@@ -251,186 +496,6 @@ export const getUserCourses = async (userId) => {
       error: "Failed to fetch user courses",
       courses: []
     };
-  }
-};
-
-/**
- * Get course progress for a user
- */
-export const getCourseProgress = async (userId, courseId) => {
-  try {
-    const progressId = `${userId}_${courseId}`;
-    const progressRef = doc(db, 'userCourseProgress', progressId);
-    const progressSnap = await getDoc(progressRef);
-
-    if (progressSnap.exists()) {
-      const progressData = progressSnap.data();
-      return { 
-        success: true, 
-        progress: {
-          ...progressData,
-          enrolledAt: progressData.enrolledAt || null,
-          lastAccessedAt: progressData.lastAccessedAt || null,
-          expiryDate: progressData.expiryDate || null,
-        }
-      };
-    }
-
-    return { success: false, progress: null };
-  } catch (error) {
-    console.error('❌ Error getting course progress:', error);
-    return { success: false, error: error.message, progress: null };
-  }
-};
-
-/**
- * Toggle lecture completion status
- */
-export const toggleLectureCompletion = async (userId, courseId, sectionId, lectureId) => {
-  try {
-    console.log('🔄 Toggling lecture completion:', { userId, courseId, sectionId, lectureId });
-
-    const progressId = `${userId}_${courseId}`;
-    const progressRef = doc(db, 'userCourseProgress', progressId);
-    const progressSnap = await getDoc(progressRef);
-
-    if (!progressSnap.exists()) {
-      console.log('⚠️ Progress document not found, creating new one');
-      
-      // Get course to calculate total lectures
-      const courseResult = await getCourseById(courseId);
-      const totalLectures = courseResult.success ? 
-        (courseResult.course.sections?.reduce((sum, s) => sum + (s.lectures || 0), 0) || 0) : 0;
-      
-      await setDoc(progressRef, {
-        progressId,
-        userId,
-        courseId,
-        progress: 0,
-        status: 'IN_PROGRESS',
-        completedLectures: [`${sectionId}_${lectureId}`],
-        totalLectures: totalLectures,
-        enrolledAt: new Date().toISOString(),
-        lastAccessedAt: new Date().toISOString(),
-      });
-      return { success: true };
-    }
-
-    const progressData = progressSnap.data();
-    const completedLectures = progressData.completedLectures || [];
-    const lectureKey = `${sectionId}_${lectureId}`;
-
-    // Toggle completion
-    let updatedLectures;
-    if (completedLectures.includes(lectureKey)) {
-      // Remove from completed
-      updatedLectures = completedLectures.filter(l => l !== lectureKey);
-    } else {
-      // Add to completed
-      updatedLectures = [...completedLectures, lectureKey];
-    }
-
-    // Calculate progress percentage
-    const totalLectures = progressData.totalLectures || 0;
-    const progress = totalLectures > 0 ? Math.round((updatedLectures.length / totalLectures) * 100) : 0;
-    
-    // Determine status
-    let status = 'IN_PROGRESS';
-    if (progress === 100) {
-      status = 'COMPLETED';
-    } else if (progress === 0) {
-      status = 'NOT_STARTED';
-    }
-
-    // Update Firestore
-    await updateDoc(progressRef, {
-      completedLectures: updatedLectures,
-      progress: progress,
-      status: status,
-      lastAccessedAt: new Date().toISOString(),
-    });
-
-    console.log('✅ Lecture completion toggled successfully');
-    return { success: true };
-  } catch (error) {
-    console.error('❌ Error toggling lecture completion:', error);
-    return { success: false, error: error.message };
-  }
-};
-
-/**
- * Enroll user in a course (called after purchase)
- */
-export const enrollInCourse = async (userId, courseId, expiryDate = null) => {
-  try {
-    console.log('📝 Enrolling user in course:', { userId, courseId, expiryDate });
-    
-    // Get course to calculate total lectures
-    const courseResult = await getCourseById(courseId);
-    if (!courseResult.success) {
-      return { success: false, error: 'Course not found' };
-    }
-    
-    const totalLectures = courseResult.course.sections?.reduce((sum, s) => sum + (s.lectures || 0), 0) || 0;
-    
-    // Get current user data
-    const userRef = doc(db, 'users', userId);
-    const userSnap = await getDoc(userRef);
-    
-    if (!userSnap.exists()) {
-      return { success: false, error: 'User not found' };
-    }
-    
-    const userData = userSnap.data();
-    const currentPurchasedCourses = userData.purchasedCourses || [];
-    
-    // Check if already purchased
-    if (currentPurchasedCourses.includes(courseId)) {
-      console.log('⚠️ User already owns this course');
-      return { success: true, alreadyPurchased: true };
-    }
-    
-    // Add course to user's purchased courses
-    const updatedPurchasedCourses = [...currentPurchasedCourses, courseId];
-    
-    await updateDoc(userRef, {
-      purchasedCourses: updatedPurchasedCourses,
-      updatedAt: new Date().toISOString()
-    });
-    
-    console.log('✅ Course added to user purchases:', updatedPurchasedCourses);
-    
-    // Create progress document
-    const progressId = `${userId}_${courseId}`;
-    const progressRef = doc(db, 'userCourseProgress', progressId);
-    
-    await setDoc(progressRef, {
-      progressId,
-      userId,
-      courseId,
-      progress: 0,
-      status: 'IN_PROGRESS',
-      completedLectures: [],
-      totalLectures: totalLectures,
-      enrolledAt: new Date().toISOString(),
-      lastAccessedAt: new Date().toISOString(),
-      expiryDate: expiryDate,
-    });
-    
-    console.log('✅ Course progress initialized');
-    
-    // Return updated user data
-    return { 
-      success: true,
-      updatedUser: {
-        ...userData,
-        purchasedCourses: updatedPurchasedCourses,
-        updatedAt: new Date().toISOString()
-      }
-    };
-  } catch (error) {
-    console.error('❌ Error enrolling user:', error);
-    return { success: false, error: error.message };
   }
 };
 
