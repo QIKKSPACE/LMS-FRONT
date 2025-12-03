@@ -1,4 +1,3 @@
-// src/App.jsx - OPTIMIZED VERSION WITH LAZY LOADING
 import React, { useState, lazy, Suspense } from 'react';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import toast, { Toaster } from 'react-hot-toast';
@@ -26,27 +25,53 @@ const LoadingSpinner = () => (
 
 // Main App Component wrapped with auth check
 function AppContent() {
-  const { isAuthenticated, isLoading, authInitialized } = useAuth();
+  const { isAuthenticated, isLoading, authInitialized, user } = useAuth();
   const [activeNavTab, setActiveNavTab] = useState('home');
   const [selectedCourseId, setSelectedCourseId] = useState(null);
-  const [viewMode, setViewMode] = useState('buy');
+  const [viewMode, setViewMode] = useState(null); // null, 'buy', or 'mycourse'
 
   // OPTIMIZATION: Memoize handlers
   const handleTabChange = React.useCallback((tab) => {
+    console.log('Tab changed to:', tab);
     setActiveNavTab(tab);
     setSelectedCourseId(null);
-    setViewMode('buy');
+    setViewMode(null);
   }, []);
 
-  const handleCourseClick = React.useCallback((courseId, isPurchased) => {
+  // FIXED: Handle course click from HomePage (unpurchased courses)
+  const handleHomePageCourseClick = React.useCallback((courseId) => {
+    console.log('Home page course clicked:', courseId);
     setSelectedCourseId(courseId);
-    setViewMode(isPurchased ? 'mycourse' : 'buy');
+    setViewMode('buy'); // Show BuyCourseDetailPage
   }, []);
 
-  const handlePurchase = React.useCallback((courseId) => {
-    console.log('Purchasing course:', courseId);
-    toast.success('Course purchased successfully!');
+  // FIXED: Handle course click from MyCoursePage (purchased courses)
+  const handleMyCourseCourseClick = React.useCallback((courseId) => {
+    console.log('My course clicked:', courseId);
+    setSelectedCourseId(courseId);
+    setViewMode('mycourse'); // Show MyCourseDetailsPage
+  }, []);
+
+  // Handle purchase completion
+  const handlePurchaseComplete = React.useCallback((courseId) => {
+    console.log('Purchase completed for course:', courseId);
+    toast.success('🎉 Course purchased successfully! Check "My Courses"');
+    
+    // Clear selected course and go back to home
     setSelectedCourseId(null);
+    setViewMode(null);
+    
+    // Force page reload to refresh user data and course lists
+    setTimeout(() => {
+      window.location.reload();
+    }, 1500);
+  }, []);
+
+  // Handle back navigation
+  const handleBackNavigation = React.useCallback(() => {
+    console.log('Back navigation triggered');
+    setSelectedCourseId(null);
+    setViewMode(null);
   }, []);
 
   // OPTIMIZATION: Show minimal loading during auth initialization only
@@ -63,43 +88,63 @@ function AppContent() {
     );
   }
 
-  const isCourseDetailsPage = selectedCourseId && viewMode === 'mycourse';
+  // Check if we're viewing a purchased course (MyCourseDetailsPage)
+  const isViewingPurchasedCourse = selectedCourseId && viewMode === 'mycourse';
+
+  // Check if we're viewing an unpurchased course detail (BuyCourseDetailPage)
+  const isViewingCourseDetail = selectedCourseId && viewMode === 'buy';
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-100">
       <Suspense fallback={<LoadingSpinner />}>
-        {isCourseDetailsPage ? (
-          <div className="fixed inset-0 z-50">
+        {/* FIXED: Full-screen course player for purchased courses */}
+        {isViewingPurchasedCourse ? (
+          <div className="fixed inset-0 z-50 bg-gray-900">
             <MyCourseDetailsPage
               courseId={selectedCourseId}
-              onBack={() => setSelectedCourseId(null)}
+              onBack={handleBackNavigation}
             />
           </div>
         ) : (
           <>
+            {/* Sidebar Navigation (Desktop) */}
             <SidebarNav activeTab={activeNavTab} onTabChange={handleTabChange} />
             
+            {/* Main Content Area */}
             <div className="lg:ml-72 transition-all duration-300">
-              {selectedCourseId ? (
+              {/* FIXED: Show course detail page when viewing unpurchased course */}
+              {isViewingCourseDetail ? (
                 <BuyCourseDetailPage
                   courseId={selectedCourseId}
-                  onBack={() => setSelectedCourseId(null)}
-                  onPurchase={handlePurchase}
+                  onBack={handleBackNavigation}
+                  onPurchase={handlePurchaseComplete}
                 />
               ) : (
                 <>
+                  {/* Home Tab - Shows unpurchased courses */}
                   {activeNavTab === 'home' && (
-                    <HomePage onCourseClick={(id) => handleCourseClick(id, false)} />
+                    <HomePage onCourseClick={handleHomePageCourseClick} />
                   )}
+                  
+                  {/* My Course Tab - Shows purchased courses */}
                   {activeNavTab === 'mycourse' && (
-                    <MyCoursePage onCourseClick={(id) => handleCourseClick(id, true)} />
+                    <MyCoursePage onCourseClick={handleMyCourseCourseClick} />
                   )}
-                  {activeNavTab === 'livesession' && <LiveSessionPage />}
-                  {activeNavTab === 'profile' && <ProfilePage />}
+                  
+                  {/* Live Session Tab */}
+                  {activeNavTab === 'livesession' && (
+                    <LiveSessionPage />
+                  )}
+                  
+                  {/* Profile Tab */}
+                  {activeNavTab === 'profile' && (
+                    <ProfilePage />
+                  )}
                 </>
               )}
             </div>
 
+            {/* Bottom Navigation (Mobile) */}
             <BottomNav activeTab={activeNavTab} onTabChange={handleTabChange} />
           </>
         )}
@@ -112,7 +157,7 @@ function AppContent() {
 function App() {
   return (
     <AuthProvider>
-      {/* OPTIMIZATION: Reduced toast options */}
+      {/* Toast notifications */}
       <Toaster
         position="top-center"
         reverseOrder={false}
@@ -144,6 +189,9 @@ function App() {
               primary: '#ef4444',
               secondary: '#fff',
             },
+          },
+          loading: {
+            duration: Infinity,
           },
         }}
       />

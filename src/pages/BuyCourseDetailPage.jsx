@@ -1,16 +1,16 @@
 /**
- * BuyCourseDetailPage Component - UPDATED WITH FIRESTORE
- * 
- * Dynamic course detail page with banner, details, price, and Buy Now button
+ * BuyCourseDetailPage Component - FIXED VERSION
+ * Shows course details with proper thumbnail, price, and working Buy Now button
  */
 import React, { useState, useEffect } from 'react';
 import { ArrowBack, ShoppingCart } from '@mui/icons-material';
-import { getCourseById, enrollInCourse } from '../services/courseService';
+import { getCourseById } from '../services/courseService';
+import { initiatePayment } from '../services/razorpayService';
 import { useAuth } from '../context/AuthContext';
 import toast from 'react-hot-toast';
 
 const BuyCourseDetailPage = ({ courseId, onBack, onPurchase }) => {
-  const { user } = useAuth();
+  const { user, refreshUserData } = useAuth();
   const [course, setCourse] = useState(null);
   const [loading, setLoading] = useState(true);
   const [purchasing, setPurchasing] = useState(false);
@@ -20,16 +20,21 @@ const BuyCourseDetailPage = ({ courseId, onBack, onPurchase }) => {
     const fetchCourse = async () => {
       try {
         setLoading(true);
-        const courseData = await getCourseById(courseId);
+        console.log('🔍 Fetching course details for:', courseId);
         
-        if (courseData) {
-          setCourse(courseData);
+        const result = await getCourseById(courseId);
+        
+        if (result.success && result.course) {
+          console.log('✅ Course fetched successfully:', result.course);
+          console.log('📸 Thumbnail:', result.course.courseThumbnail);
+          console.log('💰 Price:', result.course.price);
+          setCourse(result.course);
         } else {
-          console.error('Course not found in Firestore');
+          console.error('❌ Course not found:', result.error);
           toast.error('Course not found');
         }
       } catch (error) {
-        console.error('Error fetching course:', error);
+        console.error('❌ Error fetching course:', error);
         toast.error('Failed to load course');
       } finally {
         setLoading(false);
@@ -41,6 +46,7 @@ const BuyCourseDetailPage = ({ courseId, onBack, onPurchase }) => {
     }
   }, [courseId]);
 
+  // ✅ FIXED: Handle Buy Now with proper Razorpay integration
   const handleBuyNow = async () => {
     if (!user) {
       toast.error('Please login to purchase this course');
@@ -51,32 +57,46 @@ const BuyCourseDetailPage = ({ courseId, onBack, onPurchase }) => {
 
     try {
       setPurchasing(true);
+      console.log('💳 Initiating payment for:', course.courseTitle);
+      console.log('💰 Price:', course.price);
       
-      // Set expiry date (1 year from now)
-      const expiryDate = new Date();
-      expiryDate.setFullYear(expiryDate.getFullYear() + 1);
-      const expiryDateStr = expiryDate.toISOString().split('T')[0]; // YYYY-MM-DD
+      // ✅ Prepare course data for Razorpay
+      const courseDataForPayment = {
+        id: course.id,
+        title: course.courseTitle || course.title,
+        price: course.price || 0,
+        thumbnail: course.courseThumbnail || course.thumbnail,
+        description: course.courseDescription || course.description,
+      };
 
-      // Enroll user in course
-      const result = await enrollInCourse(user.uid, courseId, expiryDateStr);
+      console.log('📦 Course data for payment:', courseDataForPayment);
 
-      if (result.success) {
-        toast.success('🎉 Course purchased successfully!');
-        
-        // Wait a bit for user to see the success message
-        setTimeout(() => {
-          // Call the onPurchase callback if provided
+      // ✅ Initiate Razorpay payment with callback
+      const result = await initiatePayment(
+        courseDataForPayment, 
+        user,
+        async (updatedUser) => {
+          console.log('✅ Payment successful! Refreshing user data...');
+          
+          // Refresh user data in AuthContext
+          if (refreshUserData) {
+            await refreshUserData();
+            console.log('✅ User data refreshed');
+          }
+          
+          // Call onPurchase callback if provided
           if (onPurchase) {
             onPurchase(courseId);
           }
-          // Go back to previous page
-          onBack();
-        }, 1500);
-      } else {
-        toast.error(result.error || 'Failed to purchase course');
+        }
+      );
+
+      if (!result.success) {
+        console.error('❌ Payment initiation failed:', result.error);
+        toast.error('Failed to initiate payment. Please try again.');
       }
     } catch (error) {
-      console.error('Purchase error:', error);
+      console.error('❌ Purchase error:', error);
       toast.error('An error occurred during purchase');
     } finally {
       setPurchasing(false);
@@ -116,6 +136,19 @@ const BuyCourseDetailPage = ({ courseId, onBack, onPurchase }) => {
     );
   }
 
+  // ✅ Get course display data with fallbacks
+  const displayTitle = course.courseTitle || course.title || 'Untitled Course';
+  const displayThumbnail = course.courseThumbnail || course.thumbnail || 'https://via.placeholder.com/1200x600?text=Course+Thumbnail';
+  const displayPrice = course.price || 0;
+  const displayDescription = course.courseDescription || course.description || 'No description available.';
+  const displayChapters = course.chapters || 0;
+
+  console.log('🎨 Rendering with:', {
+    title: displayTitle,
+    thumbnail: displayThumbnail,
+    price: displayPrice,
+  });
+
   return (
     <div className="flex flex-col min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-100">
       {/* Mobile Header */}
@@ -148,15 +181,19 @@ const BuyCourseDetailPage = ({ courseId, onBack, onPurchase }) => {
       {/* Course Banner */}
       <div className="relative w-full h-72 lg:h-[500px] overflow-hidden">
         <img
-          src={course.thumbnail}
-          alt={course.title}
+          src={displayThumbnail}
+          alt={displayTitle}
           className="w-full h-full object-cover"
+          onError={(e) => {
+            console.error('❌ Image failed to load:', displayThumbnail);
+            e.target.src = 'https://via.placeholder.com/1200x600?text=Course+Image';
+          }}
         />
         <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/50 to-transparent"></div>
         <div className="absolute bottom-0 left-0 right-0 p-8 lg:p-12">
           <div className="text-white">
             <h2 className="text-4xl lg:text-6xl font-extrabold drop-shadow-2xl mb-2">
-              {course.title}
+              {displayTitle}
             </h2>
             {course.membershipType && (
               <span className="inline-block bg-red-600 text-white px-4 py-2 rounded-full text-sm font-semibold">
@@ -177,7 +214,7 @@ const BuyCourseDetailPage = ({ courseId, onBack, onPurchase }) => {
             {/* Description */}
             <div 
               className="text-gray-700 leading-relaxed text-lg mb-6"
-              dangerouslySetInnerHTML={{ __html: course.description }}
+              dangerouslySetInnerHTML={{ __html: displayDescription }}
             />
 
             {/* Course Info */}
@@ -189,7 +226,7 @@ const BuyCourseDetailPage = ({ courseId, onBack, onPurchase }) => {
                   </div>
                   <div>
                     <p className="text-sm text-gray-500">Total Chapters</p>
-                    <p className="text-lg font-bold text-gray-900">{course.chapters} Chapters</p>
+                    <p className="text-lg font-bold text-gray-900">{displayChapters} Chapters</p>
                   </div>
                 </div>
 
@@ -234,62 +271,45 @@ const BuyCourseDetailPage = ({ courseId, onBack, onPurchase }) => {
           <div className="flex-1"></div>
 
           {/* Purchase Section - Stuck at bottom */}
-          {!course.isPurchased && (
-            <div className="bg-gradient-to-r from-white/95 to-white/90 backdrop-blur-sm rounded-2xl border border-gray-200/50 shadow-2xl p-8 mt-auto">
-              <div className="flex flex-col lg:flex-row items-center justify-between gap-6">
-                <div>
-                  <p className="text-sm text-gray-500 mb-2 font-medium">Total Price</p>
-                  <div className="flex items-baseline gap-3">
-                    <p className="text-4xl font-extrabold bg-gradient-to-r from-gray-900 to-gray-700 bg-clip-text text-transparent">
-                      ₹{course.price}
-                    </p>
-                    {course.discount > 0 && (
-                      <div className="flex flex-col">
-                        <span className="text-sm text-gray-500 line-through">
-                          ₹{Math.round(course.price / (1 - course.discount / 100))}
-                        </span>
-                        <span className="text-xs text-green-600 font-semibold">
-                          Save {course.discount}%
-                        </span>
-                      </div>
-                    )}
-                  </div>
-                </div>
-                <button
-                  onClick={handleBuyNow}
-                  disabled={purchasing}
-                  className="w-full lg:w-auto bg-gradient-to-r from-red-600 to-red-700 text-white px-10 py-4 rounded-xl text-lg font-bold hover:from-red-700 hover:to-red-800 transition-all duration-300 flex items-center justify-center gap-3 hover:scale-105 transform disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
-                >
-                  {purchasing ? (
-                    <>
-                      <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                      Processing...
-                    </>
-                  ) : (
-                    <>
-                      <ShoppingCart style={{ fontSize: '22px' }} />
-                      Buy Now
-                    </>
+          <div className="bg-gradient-to-r from-white/95 to-white/90 backdrop-blur-sm rounded-2xl border border-gray-200/50 shadow-2xl p-8 mt-auto">
+            <div className="flex flex-col lg:flex-row items-center justify-between gap-6">
+              <div>
+                <p className="text-sm text-gray-500 mb-2 font-medium">Total Price</p>
+                <div className="flex items-baseline gap-3">
+                  <p className="text-4xl font-extrabold bg-gradient-to-r from-gray-900 to-gray-700 bg-clip-text text-transparent">
+                    ₹{displayPrice}
+                  </p>
+                  {course.discount > 0 && (
+                    <div className="flex flex-col">
+                      <span className="text-sm text-gray-500 line-through">
+                        ₹{Math.round(displayPrice / (1 - course.discount / 100))}
+                      </span>
+                      <span className="text-xs text-green-600 font-semibold">
+                        Save {course.discount}%
+                      </span>
+                    </div>
                   )}
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* Already Purchased Message */}
-          {course.isPurchased && (
-            <div className="bg-gradient-to-r from-green-50 to-emerald-50 border-2 border-green-300/50 rounded-2xl p-8 mt-auto shadow-lg">
-              <div className="flex items-center gap-4">
-                <div className="w-16 h-16 bg-gradient-to-br from-green-500 to-emerald-600 rounded-full flex items-center justify-center shadow-lg">
-                  <span className="text-white text-2xl font-bold">✓</span>
-                </div>
-                <div>
-                  <p className="font-extrabold text-green-900 text-lg">You own this course</p>
-                  <p className="text-sm text-green-700 font-medium mt-1">Access all content in My Courses</p>
                 </div>
               </div>
+              <button
+                onClick={handleBuyNow}
+                disabled={purchasing}
+                className="w-full lg:w-auto bg-gradient-to-r from-red-600 to-red-700 text-white px-10 py-4 rounded-xl text-lg font-bold hover:from-red-700 hover:to-red-800 transition-all duration-300 flex items-center justify-center gap-3 hover:scale-105 transform disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 shadow-lg"
+              >
+                {purchasing ? (
+                  <>
+                    <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                    Processing...
+                  </>
+                ) : (
+                  <>
+                    <ShoppingCart style={{ fontSize: '22px' }} />
+                    Buy Now
+                  </>
+                )}
+              </button>
             </div>
-          )}
+          </div>
         </div>
       </div>
     </div>

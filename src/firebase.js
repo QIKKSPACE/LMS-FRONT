@@ -1,11 +1,8 @@
 // src/firebase.js
-import { initializeApp } from 'firebase/app';
-import { getAuth } from 'firebase/auth';
-import { getFirestore } from 'firebase/firestore';
-import { getStorage } from 'firebase/storage';
+import { initializeApp } from "firebase/app";
+import { getAuth } from "firebase/auth";
+import { getFirestore } from "firebase/firestore";
 
-// Your Firebase configuration
-// IMPORTANT: Use the SAME config as your admin panel
 const firebaseConfig = {
     apiKey: "AIzaSyCLhGlh_Taw-aRI7vEQBEzkzrjeuAKUxNc",
     authDomain: "stf-web-34a3b.firebaseapp.com",
@@ -14,15 +11,20 @@ const firebaseConfig = {
     storageBucket: "stf-web-34a3b.firebasestorage.app",
     messagingSenderId: "311427704953",
     appId: "1:311427704953:web:a93b0b28026b4d140b0ca8",
-    measurementId: "G-79FBF73WJM" 
+    measurementId: "G-79FBF73WJM"
 };
 
 // Initialize Firebase
+console.log('Initializing Firebase...');
 const app = initializeApp(firebaseConfig);
+console.log('Firebase initialized successfully');
 
-// Initialize services
+// Initialize Auth
 export const auth = getAuth(app);
+console.log('Firebase Auth initialized');
+
+// Initialize Firestore Database
 export const db = getFirestore(app);
-export const storage = getStorage(app);
+console.log('Firestore Database initialized');
 
 export default app;

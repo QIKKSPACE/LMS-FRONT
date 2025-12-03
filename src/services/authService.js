@@ -1,4 +1,4 @@
-// src/services/authService.js
+// src/services/authService.js - FIXED WITH purchasedCourses
 import { 
   createUserWithEmailAndPassword, 
   signInWithEmailAndPassword, 
@@ -49,13 +49,14 @@ export const signupUser = async (name, email, password) => {
       displayName: name
     });
 
-    // Create user profile in Firestore Database
+    // ✅ Create user profile in Firestore Database with purchasedCourses
     const userProfile = {
       uid: user.uid,
       name: name,
       email: email,
       mobileNumber: '',
       address: '',
+      purchasedCourses: [], // ✅ Initialize empty array
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp()
     };
@@ -119,24 +120,30 @@ export const loginUser = async (email, password) => {
       console.log('User profile found in Firestore');
       const userProfile = userDocSnap.data();
       
-      // Convert Firestore timestamps to ISO strings
+      // ✅ Ensure purchasedCourses exists
+      const completeProfile = {
+        ...userProfile,
+        purchasedCourses: userProfile.purchasedCourses || [],
+        createdAt: userProfile.createdAt?.toDate?.()?.toISOString() || new Date().toISOString(),
+        updatedAt: userProfile.updatedAt?.toDate?.()?.toISOString() || new Date().toISOString()
+      };
+      
+      console.log('✅ User purchased courses:', completeProfile.purchasedCourses.length);
+      
       return { 
         success: true, 
-        user: {
-          ...userProfile,
-          createdAt: userProfile.createdAt?.toDate?.()?.toISOString() || new Date().toISOString(),
-          updatedAt: userProfile.updatedAt?.toDate?.()?.toISOString() || new Date().toISOString()
-        }
+        user: completeProfile
       };
     } else {
       console.log('User profile not found, creating new one');
-      // Profile doesn't exist, create one
+      // ✅ Profile doesn't exist, create one with purchasedCourses
       const userProfile = {
         uid: user.uid,
         name: user.displayName || trimmedEmail.split('@')[0],
         email: user.email,
         mobileNumber: '',
         address: '',
+        purchasedCourses: [], // ✅ Initialize empty array
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp()
       };
@@ -235,11 +242,12 @@ export const updateUserProfile = async (userId, updates) => {
       const updatedUser = updatedDocSnap.data();
       console.log('Fetched updated user profile:', updatedUser);
       
-      // Convert Firestore timestamps to ISO strings
+      // ✅ Convert Firestore timestamps to ISO strings and ensure purchasedCourses exists
       return { 
         success: true, 
         user: {
           ...updatedUser,
+          purchasedCourses: updatedUser.purchasedCourses || [],
           createdAt: updatedUser.createdAt?.toDate?.()?.toISOString() || new Date().toISOString(),
           updatedAt: updatedUser.updatedAt?.toDate?.()?.toISOString() || new Date().toISOString()
         }
@@ -284,14 +292,19 @@ export const getUserProfile = async (userId) => {
       console.log('User profile fetched successfully');
       const userData = userDocSnap.data();
       
-      // Convert Firestore timestamps to ISO strings
+      // ✅ Convert Firestore timestamps to ISO strings and ensure purchasedCourses exists
+      const completeProfile = {
+        ...userData,
+        purchasedCourses: userData.purchasedCourses || [],
+        createdAt: userData.createdAt?.toDate?.()?.toISOString() || new Date().toISOString(),
+        updatedAt: userData.updatedAt?.toDate?.()?.toISOString() || new Date().toISOString()
+      };
+      
+      console.log('✅ Purchased courses count:', completeProfile.purchasedCourses.length);
+      
       return { 
         success: true, 
-        user: {
-          ...userData,
-          createdAt: userData.createdAt?.toDate?.()?.toISOString() || new Date().toISOString(),
-          updatedAt: userData.updatedAt?.toDate?.()?.toISOString() || new Date().toISOString()
-        }
+        user: completeProfile
       };
     } else {
       console.log('User profile not found in Firestore');

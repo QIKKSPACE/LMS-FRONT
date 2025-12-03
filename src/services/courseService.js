@@ -1,354 +1,523 @@
-// src/services/courseService.js
+// src/services/courseService.js - FIXED WITH CORRECT FIRESTORE FIELD MAPPING
 import { 
-    collection, 
-    getDocs, 
-    doc, 
-    getDoc,
-    query,
-    where,
-    setDoc,
-    updateDoc,
-    arrayUnion,
-    arrayRemove,
-    serverTimestamp 
-  } from 'firebase/firestore';
-  import { db } from '../firebase';
+  collection, 
+  getDocs, 
+  doc, 
+  getDoc,
+  setDoc,
+  updateDoc,
+  arrayUnion,
+  query,
+  where,
+  orderBy,
+  onSnapshot
+} from "firebase/firestore";
+import { db } from "../firebase";
+
+/**
+ * Transform Firestore course data to match app structure
+ * ✅ FIXED: Maps exact Firestore field names from your database
+ */
+const transformCourseData = (courseId, firestoreData) => {
+  console.log('🔄 Transforming course data for:', courseId);
+  console.log('📦 Raw Firestore data:', firestoreData);
   
-  /**
-   * Convert admin course structure to frontend format
-   */
-  const convertCourseFormat = (adminCourse, userEnrollment = null) => {
-    const course = {
-      id: adminCourse.id,
-      title: adminCourse.courseTitle,
-      thumbnail: adminCourse.courseThumbnail,
-      description: adminCourse.courseDescription,
-      price: adminCourse.price,
-      discount: adminCourse.discount || 0,
-      membershipType: 'PREMIUM', // Default
-      chapters: adminCourse.courseContent?.length || 0,
-      category: 'all',
-      
-      // Convert courseContent (chapters) to sections
-      sections: adminCourse.courseContent?.map(chapter => ({
-        id: chapter.chapterId,
-        title: chapter.chapterTitle,
-        lectures: chapter.chapterContent?.length || 0,
-        completed: 0, // Will be calculated from user progress
-        duration: calculateSectionDuration(chapter.chapterContent),
-        lecturesList: chapter.chapterContent?.map(lecture => ({
-          id: lecture.lectureId,
-          title: lecture.lectureTitle,
-          duration: formatDuration(lecture.lectureDuration),
-          isCompleted: false, // Will be updated from user progress
-          videoUrl: lecture.lectureUrl,
-          isPreviewFree: lecture.isPreviewFree || false,
-          order: lecture.lectureOrder
-        })).sort((a, b) => a.order - b.order) || []
-      })).sort((a, b) => a.id.localeCompare(b.id)) || [],
+  // ✅ Extract sections from courseContent array
+  let sections = [];
   
-      // Live lectures
-      liveLectures: adminCourse.liveLectures || [],
-    };
-  
-    // If user enrollment exists, add purchase info
-    if (userEnrollment) {
-      course.isPurchased = true;
-      course.enrolledAt = userEnrollment.enrolledAt;
-      course.expiryDate = userEnrollment.expiryDate;
-      course.progress = userEnrollment.progress || 0;
-      course.status = calculateCourseStatus(userEnrollment);
-      
-      // Update completed lectures from user progress
-      if (userEnrollment.completedLectures) {
-        course.sections = course.sections.map(section => ({
-          ...section,
-          lecturesList: section.lecturesList.map(lecture => ({
-            ...lecture,
-            isCompleted: userEnrollment.completedLectures.includes(lecture.id)
-          })),
-          completed: section.lecturesList.filter(lecture => 
-            userEnrollment.completedLectures.includes(lecture.id)
-          ).length
-        }));
-      }
-    } else {
-      course.isPurchased = false;
-      course.progress = 0;
-      course.status = 'PAID';
-    }
-  
-    return course;
-  };
-  
-  /**
-   * Calculate total duration of a section
-   */
-  const calculateSectionDuration = (lectures = []) => {
-    const totalMinutes = lectures.reduce((sum, lecture) => sum + (lecture.lectureDuration || 0), 0);
-    const hours = Math.floor(totalMinutes / 60);
-    const minutes = totalMinutes % 60;
-    return `${hours}hr ${minutes}min`;
-  };
-  
-  /**
-   * Format lecture duration
-   */
-  const formatDuration = (minutes) => {
-    if (minutes < 60) {
-      return `${minutes}:00`;
-    }
-    const hrs = Math.floor(minutes / 60);
-    const mins = minutes % 60;
-    return `${hrs}:${mins.toString().padStart(2, '0')}`;
-  };
-  
-  /**
-   * Calculate course status
-   */
-  const calculateCourseStatus = (enrollment) => {
-    const now = new Date();
-    const expiry = new Date(enrollment.expiryDate);
+  if (firestoreData.courseContent && Array.isArray(firestoreData.courseContent)) {
+    console.log('✅ Found courseContent with', firestoreData.courseContent.length, 'chapters');
     
-    if (enrollment.progress === 100) {
-      return 'COMPLETED';
-    } else if (expiry < now) {
-      return 'EXPIRED';
-    } else if (enrollment.progress > 0) {
-      return 'IN_PROGRESS';
-    } else {
-      return 'PAID';
-    }
-  };
-  
-  /**
-   * Fetch all courses from Firestore
-   */
-  export const getAllCourses = async () => {
-    try {
-      const coursesRef = collection(db, 'courses');
-      const snapshot = await getDocs(coursesRef);
+    sections = firestoreData.courseContent.map((chapter, index) => {
+      // Extract lectures from chapterContent
+      const lecturesList = chapter.chapterContent && Array.isArray(chapter.chapterContent)
+        ? chapter.chapterContent.map((lecture, lectureIndex) => ({
+            id: lecture.lectureId || `lect_${Date.now()}_${lectureIndex}`,
+            title: lecture.lectureTitle || `Lecture ${lectureIndex + 1}`,
+            duration: lecture.lectureDuration || '30',
+            url: lecture.lectureUrl || '',
+            order: lecture.lectureOrder || lectureIndex + 1,
+            isPreviewFree: lecture.isPreviewFree || false,
+            isCompleted: false,
+          }))
+        : [];
       
-      const courses = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      }));
+      return {
+        id: chapter.chapterId || `ch_${Date.now()}_${index}`,
+        title: chapter.chapterTitle || `Section ${index + 1}`,
+        order: chapter.chapterOrder || index + 1,
+        lecturesList: lecturesList,
+        lectures: lecturesList.length,
+        completed: 0,
+        duration: lecturesList.reduce((total, lec) => total + parseInt(lec.duration || 0), 0) + ' min'
+      };
+    });
+  }
   
-      return courses.map(course => convertCourseFormat(course));
-    } catch (error) {
-      console.error('Error fetching courses:', error);
-      return [];
-    }
+  console.log('✅ Transformed sections:', sections.length, 'sections');
+  
+  // Calculate totals
+  const totalChapters = sections.length;
+  const totalLectures = sections.reduce((sum, section) => sum + (section.lectures || 0), 0);
+  
+  console.log(`📊 Total: ${totalChapters} chapters, ${totalLectures} lectures`);
+  
+  // ✅ Return transformed course with exact Firestore field mapping
+  return {
+    id: courseId,
+    
+    // Basic Info - map from Firestore fields
+    title: firestoreData.courseTitle || 'Untitled Course',
+    courseTitle: firestoreData.courseTitle,
+    courseName: firestoreData.courseTitle,
+    
+    // Thumbnail - from courseThumbnail field
+    thumbnail: firestoreData.courseThumbnail || 'https://via.placeholder.com/800x400?text=Course',
+    courseThumbnail: firestoreData.courseThumbnail,
+    thumbnailUrl: firestoreData.courseThumbnail,
+    imageUrl: firestoreData.courseThumbnail,
+    
+    // Description
+    description: firestoreData.courseDescription || '',
+    courseDescription: firestoreData.courseDescription,
+    
+    // Pricing
+    price: firestoreData.price || 0,
+    discount: firestoreData.discount || 0,
+    
+    // Category/Type
+    membershipType: firestoreData.membershipType || 'Standard',
+    
+    // Educator
+    educatorId: firestoreData.educatorId || '',
+    
+    // Content Structure
+    sections: sections,
+    chapters: totalChapters,
+    totalLectures: totalLectures,
+    
+    // Live Lectures
+    liveLectures: firestoreData.liveLectures || [],
+    
+    // Timestamps
+    createdAt: firestoreData.createdAt?.toDate?.()?.toISOString() || firestoreData.createdAt || null,
+    updatedAt: firestoreData.updatedAt?.toDate?.()?.toISOString() || firestoreData.updatedAt || null,
+    
+    // Purchase/Progress (will be set based on user data)
+    status: 'NOT_STARTED',
+    progress: 0,
+    isPurchased: false,
   };
-  
-  /**
-   * Fetch single course by ID
-   */
-  export const getCourseById = async (courseId) => {
-    try {
-      const courseRef = doc(db, 'courses', courseId);
-      const courseSnap = await getDoc(courseRef);
-      
-      if (courseSnap.exists()) {
-        return convertCourseFormat({
-          id: courseSnap.id,
-          ...courseSnap.data()
-        });
-      }
-      return null;
-    } catch (error) {
-      console.error('Error fetching course:', error);
-      return null;
-    }
-  };
-  
-  /**
-   * Fetch user's enrolled courses
-   */
-  export const getUserCourses = async (userId) => {
-    try {
-      // Get user enrollments
-      const enrollmentsRef = collection(db, 'enrollments');
-      const q = query(enrollmentsRef, where('userId', '==', userId));
-      const enrollmentSnap = await getDocs(q);
-      
-      if (enrollmentSnap.empty) {
-        return [];
-      }
-  
-      const enrollments = {};
-      enrollmentSnap.docs.forEach(doc => {
-        enrollments[doc.data().courseId] = {
-          ...doc.data(),
-          enrollmentId: doc.id
-        };
+};
+
+/**
+ * Fetch all courses from Firestore
+ */
+export const getAllCourses = async () => {
+  try {
+    console.log('📚 Fetching all courses from Firestore...');
+
+    const coursesCollection = collection(db, 'courses');
+    const coursesSnapshot = await getDocs(coursesCollection);
+    
+    const courses = [];
+    coursesSnapshot.forEach((doc) => {
+      const courseData = transformCourseData(doc.id, doc.data());
+      courses.push(courseData);
+    });
+
+    console.log(`✅ Fetched ${courses.length} courses from Firestore`);
+    if (courses.length > 0) {
+      console.log('📦 Sample course:', {
+        id: courses[0].id,
+        title: courses[0].courseTitle,
+        thumbnail: courses[0].courseThumbnail,
+        price: courses[0].price,
+        chapters: courses[0].chapters
       });
-  
-      // Get all courses
-      const coursesRef = collection(db, 'courses');
-      const coursesSnap = await getDocs(coursesRef);
-      
-      // Filter and convert enrolled courses
-      const userCourses = coursesSnap.docs
-        .filter(doc => enrollments[doc.id])
-        .map(doc => {
-          const courseData = { id: doc.id, ...doc.data() };
-          const enrollment = enrollments[doc.id];
-          return convertCourseFormat(courseData, enrollment);
-        });
-  
-      return userCourses;
-    } catch (error) {
-      console.error('Error fetching user courses:', error);
-      return [];
     }
-  };
-  
-  /**
-   * Enroll user in a course (purchase)
-   */
-  export const enrollInCourse = async (userId, courseId, expiryDate) => {
-    try {
-      const enrollmentRef = doc(collection(db, 'enrollments'));
+    
+    return { success: true, courses };
+  } catch (error) {
+    console.error("❌ Error fetching courses:", error);
+    return { 
+      success: false, 
+      error: "Failed to fetch courses",
+      courses: [] 
+    };
+  }
+};
+
+/**
+ * Fetch a single course by ID
+ */
+export const getCourseById = async (courseId) => {
+  try {
+    console.log('🔍 Fetching course:', courseId);
+
+    const courseDocRef = doc(db, 'courses', courseId);
+    const courseDocSnap = await getDoc(courseDocRef);
+
+    if (courseDocSnap.exists()) {
+      const courseData = transformCourseData(courseDocSnap.id, courseDocSnap.data());
       
-      await setDoc(enrollmentRef, {
+      console.log('✅ Course found:', courseId);
+      console.log('📸 Thumbnail URL:', courseData.courseThumbnail);
+      console.log('💰 Price:', courseData.price);
+      console.log('📚 Sections:', courseData.sections?.length || 0);
+      
+      return {
+        success: true,
+        course: courseData
+      };
+    } else {
+      console.log('❌ Course not found:', courseId);
+      return {
+        success: false,
+        error: 'Course not found'
+      };
+    }
+  } catch (error) {
+    console.error("❌ Error fetching course:", error);
+    return {
+      success: false,
+      error: "Failed to fetch course"
+    };
+  }
+};
+
+/**
+ * Fetch courses purchased by a specific user
+ */
+export const getUserCourses = async (userId) => {
+  try {
+    console.log('👤 Fetching courses for user:', userId);
+
+    // First, get user's purchased courses from their profile
+    const userDocRef = doc(db, 'users', userId);
+    const userDocSnap = await getDoc(userDocRef);
+
+    if (!userDocSnap.exists()) {
+      console.log('❌ User not found');
+      return { success: false, error: 'User not found', courses: [] };
+    }
+
+    const userData = userDocSnap.data();
+    const purchasedCourseIds = userData.purchasedCourses || [];
+
+    if (purchasedCourseIds.length === 0) {
+      console.log('ℹ️ User has no purchased courses');
+      return { success: true, courses: [] };
+    }
+
+    console.log('🛒 User purchased course IDs:', purchasedCourseIds);
+
+    // Fetch all purchased courses with their progress
+    const courses = [];
+    for (const courseId of purchasedCourseIds) {
+      const result = await getCourseById(courseId);
+      if (result.success) {
+        // Get progress for this course
+        const progressResult = await getCourseProgress(userId, courseId);
+        
+        if (progressResult.success && progressResult.progress) {
+          // Merge progress with course data
+          const courseWithProgress = {
+            ...result.course,
+            progress: progressResult.progress.progress || 0,
+            status: progressResult.progress.status || 'IN_PROGRESS',
+            expiryDate: progressResult.progress.expiryDate || null,
+            isPurchased: true,
+          };
+          courses.push(courseWithProgress);
+        } else {
+          // No progress yet, add with defaults
+          courses.push({
+            ...result.course,
+            progress: 0,
+            status: 'NOT_STARTED',
+            isPurchased: true,
+          });
+        }
+      }
+    }
+
+    console.log(`✅ Fetched ${courses.length} purchased courses for user`);
+    return { success: true, courses };
+  } catch (error) {
+    console.error("❌ Error fetching user courses:", error);
+    return {
+      success: false,
+      error: "Failed to fetch user courses",
+      courses: []
+    };
+  }
+};
+
+/**
+ * Get course progress for a user
+ */
+export const getCourseProgress = async (userId, courseId) => {
+  try {
+    const progressId = `${userId}_${courseId}`;
+    const progressRef = doc(db, 'userCourseProgress', progressId);
+    const progressSnap = await getDoc(progressRef);
+
+    if (progressSnap.exists()) {
+      const progressData = progressSnap.data();
+      return { 
+        success: true, 
+        progress: {
+          ...progressData,
+          enrolledAt: progressData.enrolledAt || null,
+          lastAccessedAt: progressData.lastAccessedAt || null,
+          expiryDate: progressData.expiryDate || null,
+        }
+      };
+    }
+
+    return { success: false, progress: null };
+  } catch (error) {
+    console.error('❌ Error getting course progress:', error);
+    return { success: false, error: error.message, progress: null };
+  }
+};
+
+/**
+ * Toggle lecture completion status
+ */
+export const toggleLectureCompletion = async (userId, courseId, sectionId, lectureId) => {
+  try {
+    console.log('🔄 Toggling lecture completion:', { userId, courseId, sectionId, lectureId });
+
+    const progressId = `${userId}_${courseId}`;
+    const progressRef = doc(db, 'userCourseProgress', progressId);
+    const progressSnap = await getDoc(progressRef);
+
+    if (!progressSnap.exists()) {
+      console.log('⚠️ Progress document not found, creating new one');
+      
+      // Get course to calculate total lectures
+      const courseResult = await getCourseById(courseId);
+      const totalLectures = courseResult.success ? 
+        (courseResult.course.sections?.reduce((sum, s) => sum + (s.lectures || 0), 0) || 0) : 0;
+      
+      await setDoc(progressRef, {
+        progressId,
         userId,
         courseId,
-        enrolledAt: serverTimestamp(),
-        expiryDate: expiryDate || getDefaultExpiryDate(),
         progress: 0,
-        completedLectures: [],
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp()
+        status: 'IN_PROGRESS',
+        completedLectures: [`${sectionId}_${lectureId}`],
+        totalLectures: totalLectures,
+        enrolledAt: new Date().toISOString(),
+        lastAccessedAt: new Date().toISOString(),
       });
-  
-      return { success: true, enrollmentId: enrollmentRef.id };
-    } catch (error) {
-      console.error('Error enrolling in course:', error);
-      return { success: false, error: error.message };
+      return { success: true };
     }
-  };
-  
-  /**
-   * Update course progress
-   */
-  export const updateCourseProgress = async (userId, courseId, completedLectures) => {
-    try {
-      // Find enrollment document
-      const enrollmentsRef = collection(db, 'enrollments');
-      const q = query(
-        enrollmentsRef, 
-        where('userId', '==', userId),
-        where('courseId', '==', courseId)
-      );
-      const enrollmentSnap = await getDocs(q);
-      
-      if (enrollmentSnap.empty) {
-        throw new Error('Enrollment not found');
+
+    const progressData = progressSnap.data();
+    const completedLectures = progressData.completedLectures || [];
+    const lectureKey = `${sectionId}_${lectureId}`;
+
+    // Toggle completion
+    let updatedLectures;
+    if (completedLectures.includes(lectureKey)) {
+      // Remove from completed
+      updatedLectures = completedLectures.filter(l => l !== lectureKey);
+    } else {
+      // Add to completed
+      updatedLectures = [...completedLectures, lectureKey];
+    }
+
+    // Calculate progress percentage
+    const totalLectures = progressData.totalLectures || 0;
+    const progress = totalLectures > 0 ? Math.round((updatedLectures.length / totalLectures) * 100) : 0;
+    
+    // Determine status
+    let status = 'IN_PROGRESS';
+    if (progress === 100) {
+      status = 'COMPLETED';
+    } else if (progress === 0) {
+      status = 'NOT_STARTED';
+    }
+
+    // Update Firestore
+    await updateDoc(progressRef, {
+      completedLectures: updatedLectures,
+      progress: progress,
+      status: status,
+      lastAccessedAt: new Date().toISOString(),
+    });
+
+    console.log('✅ Lecture completion toggled successfully');
+    return { success: true };
+  } catch (error) {
+    console.error('❌ Error toggling lecture completion:', error);
+    return { success: false, error: error.message };
+  }
+};
+
+/**
+ * Enroll user in a course (called after purchase)
+ */
+export const enrollInCourse = async (userId, courseId, expiryDate = null) => {
+  try {
+    console.log('📝 Enrolling user in course:', { userId, courseId, expiryDate });
+    
+    // Get course to calculate total lectures
+    const courseResult = await getCourseById(courseId);
+    if (!courseResult.success) {
+      return { success: false, error: 'Course not found' };
+    }
+    
+    const totalLectures = courseResult.course.sections?.reduce((sum, s) => sum + (s.lectures || 0), 0) || 0;
+    
+    // Get current user data
+    const userRef = doc(db, 'users', userId);
+    const userSnap = await getDoc(userRef);
+    
+    if (!userSnap.exists()) {
+      return { success: false, error: 'User not found' };
+    }
+    
+    const userData = userSnap.data();
+    const currentPurchasedCourses = userData.purchasedCourses || [];
+    
+    // Check if already purchased
+    if (currentPurchasedCourses.includes(courseId)) {
+      console.log('⚠️ User already owns this course');
+      return { success: true, alreadyPurchased: true };
+    }
+    
+    // Add course to user's purchased courses
+    const updatedPurchasedCourses = [...currentPurchasedCourses, courseId];
+    
+    await updateDoc(userRef, {
+      purchasedCourses: updatedPurchasedCourses,
+      updatedAt: new Date().toISOString()
+    });
+    
+    console.log('✅ Course added to user purchases:', updatedPurchasedCourses);
+    
+    // Create progress document
+    const progressId = `${userId}_${courseId}`;
+    const progressRef = doc(db, 'userCourseProgress', progressId);
+    
+    await setDoc(progressRef, {
+      progressId,
+      userId,
+      courseId,
+      progress: 0,
+      status: 'IN_PROGRESS',
+      completedLectures: [],
+      totalLectures: totalLectures,
+      enrolledAt: new Date().toISOString(),
+      lastAccessedAt: new Date().toISOString(),
+      expiryDate: expiryDate,
+    });
+    
+    console.log('✅ Course progress initialized');
+    
+    // Return updated user data
+    return { 
+      success: true,
+      updatedUser: {
+        ...userData,
+        purchasedCourses: updatedPurchasedCourses,
+        updatedAt: new Date().toISOString()
       }
-  
-      const enrollmentDoc = enrollmentSnap.docs[0];
-      
-      // Get course to calculate progress
-      const course = await getCourseById(courseId);
-      const totalLectures = course.sections.reduce((sum, section) => 
-        sum + section.lecturesList.length, 0
-      );
-      
-      const progress = Math.round((completedLectures.length / totalLectures) * 100);
-  
-      await updateDoc(doc(db, 'enrollments', enrollmentDoc.id), {
-        completedLectures,
-        progress,
-        updatedAt: serverTimestamp()
+    };
+  } catch (error) {
+    console.error('❌ Error enrolling user:', error);
+    return { success: false, error: error.message };
+  }
+};
+
+// Export other helper functions
+export const subscribeToCoursesUpdates = (callback) => {
+  try {
+    console.log('👂 Setting up real-time course listener...');
+
+    const coursesCollection = collection(db, 'courses');
+    
+    const unsubscribe = onSnapshot(coursesCollection, (snapshot) => {
+      const courses = [];
+      snapshot.forEach((doc) => {
+        const courseData = transformCourseData(doc.id, doc.data());
+        courses.push(courseData);
       });
-  
-      return { success: true };
-    } catch (error) {
-      console.error('Error updating progress:', error);
-      return { success: false, error: error.message };
+
+      console.log(`🔄 Real-time update: ${courses.length} courses`);
+      callback({ success: true, courses });
+    }, (error) => {
+      console.error("❌ Error in course listener:", error);
+      callback({ success: false, error: "Failed to listen to courses", courses: [] });
+    });
+
+    return unsubscribe;
+  } catch (error) {
+    console.error("❌ Error setting up course listener:", error);
+    return () => {}; // Return empty function
+  }
+};
+
+export const getCoursesByCategory = async (category) => {
+  try {
+    console.log('🔍 Fetching courses by category:', category);
+
+    const coursesCollection = collection(db, 'courses');
+    const q = query(
+      coursesCollection,
+      where('membershipType', '==', category)
+    );
+    
+    const coursesSnapshot = await getDocs(q);
+    
+    const courses = [];
+    coursesSnapshot.forEach((doc) => {
+      const courseData = transformCourseData(doc.id, doc.data());
+      courses.push(courseData);
+    });
+
+    console.log(`✅ Fetched ${courses.length} courses in category: ${category}`);
+    return { success: true, courses };
+  } catch (error) {
+    console.error("❌ Error fetching courses by category:", error);
+    return {
+      success: false,
+      error: "Failed to fetch courses by category",
+      courses: []
+    };
+  }
+};
+
+export const searchCourses = async (searchTerm) => {
+  try {
+    console.log('🔍 Searching courses:', searchTerm);
+
+    // Firestore doesn't support full-text search, so we fetch all and filter
+    const result = await getAllCourses();
+    
+    if (!result.success) {
+      return result;
     }
-  };
-  
-  /**
-   * Toggle lecture completion
-   */
-  export const toggleLectureCompletion = async (userId, courseId, lectureId) => {
-    try {
-      const enrollmentsRef = collection(db, 'enrollments');
-      const q = query(
-        enrollmentsRef, 
-        where('userId', '==', userId),
-        where('courseId', '==', courseId)
-      );
-      const enrollmentSnap = await getDocs(q);
-      
-      if (enrollmentSnap.empty) {
-        throw new Error('Enrollment not found');
-      }
-  
-      const enrollmentDoc = enrollmentSnap.docs[0];
-      const enrollmentData = enrollmentDoc.data();
-      const completedLectures = enrollmentData.completedLectures || [];
-      
-      const isCompleted = completedLectures.includes(lectureId);
-      
-      if (isCompleted) {
-        // Remove from completed
-        await updateDoc(doc(db, 'enrollments', enrollmentDoc.id), {
-          completedLectures: arrayRemove(lectureId),
-          updatedAt: serverTimestamp()
-        });
-      } else {
-        // Add to completed
-        await updateDoc(doc(db, 'enrollments', enrollmentDoc.id), {
-          completedLectures: arrayUnion(lectureId),
-          updatedAt: serverTimestamp()
-        });
-      }
-  
-      // Recalculate progress
-      const newCompletedLectures = isCompleted 
-        ? completedLectures.filter(id => id !== lectureId)
-        : [...completedLectures, lectureId];
-      
-      await updateCourseProgress(userId, courseId, newCompletedLectures);
-  
-      return { success: true };
-    } catch (error) {
-      console.error('Error toggling lecture:', error);
-      return { success: false, error: error.message };
-    }
-  };
-  
-  /**
-   * Get default expiry date (1 year from now)
-   */
-  const getDefaultExpiryDate = () => {
-    const date = new Date();
-    date.setFullYear(date.getFullYear() + 1);
-    return date.toISOString().split('T')[0]; // YYYY-MM-DD
-  };
-  
-  /**
-   * Search courses
-   */
-  export const searchCourses = async (searchTerm) => {
-    try {
-      const allCourses = await getAllCourses();
-      
-      if (!searchTerm.trim()) {
-        return allCourses;
-      }
-  
-      const lowerSearchTerm = searchTerm.toLowerCase();
-      
-      return allCourses.filter(course => 
-        course.title.toLowerCase().includes(lowerSearchTerm) ||
-        course.description?.toLowerCase().includes(lowerSearchTerm)
-      );
-    } catch (error) {
-      console.error('Error searching courses:', error);
-      return [];
-    }
-  };
+
+    const searchLower = searchTerm.toLowerCase();
+    const filteredCourses = result.courses.filter(course => 
+      course.title?.toLowerCase().includes(searchLower) ||
+      course.description?.toLowerCase().includes(searchLower) ||
+      course.membershipType?.toLowerCase().includes(searchLower)
+    );
+
+    console.log(`✅ Found ${filteredCourses.length} courses matching: ${searchTerm}`);
+    return { success: true, courses: filteredCourses };
+  } catch (error) {
+    console.error("❌ Error searching courses:", error);
+    return {
+      success: false,
+      error: "Failed to search courses",
+      courses: []
+    };
+  }
+};

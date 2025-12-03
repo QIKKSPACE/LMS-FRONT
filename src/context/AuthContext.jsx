@@ -1,4 +1,4 @@
-// src/context/AuthContext.jsx - OPTIMIZED VERSION
+// src/context/AuthContext.jsx - FIXED WITH refreshUserData
 import React, { createContext, useState, useContext, useEffect, useCallback, useMemo } from 'react';
 import { 
   signupUser, 
@@ -23,6 +23,39 @@ export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [authInitialized, setAuthInitialized] = useState(false);
+
+  // ✅ NEW: Function to refresh user data from Firestore
+  const refreshUserData = useCallback(async () => {
+    if (!user || !user.uid) {
+      console.log('No user to refresh');
+      return { success: false, error: 'No user logged in' };
+    }
+
+    console.log('🔄 Refreshing user data for:', user.uid);
+
+    try {
+      const result = await getUserProfile(user.uid);
+      
+      if (result.success && result.user) {
+        console.log('✅ User data refreshed successfully');
+        console.log('📦 New purchasedCourses:', result.user.purchasedCourses);
+        
+        // Update user state
+        setUser(result.user);
+        
+        // Update cache
+        sessionStorage.setItem(`user_${result.user.uid}`, JSON.stringify(result.user));
+        
+        return { success: true, user: result.user };
+      } else {
+        console.error('❌ Failed to refresh user data:', result.error);
+        return { success: false, error: result.error };
+      }
+    } catch (error) {
+      console.error('❌ Error refreshing user data:', error);
+      return { success: false, error: error.message };
+    }
+  }, [user]);
 
   // Memoize auth state listener to prevent recreation
   useEffect(() => {
@@ -63,6 +96,7 @@ export const AuthProvider = ({ children }) => {
               name: firebaseUser.displayName || firebaseUser.email.split('@')[0],
               mobileNumber: '',
               address: '',
+              purchasedCourses: [], // ✅ Initialize empty array
               createdAt: new Date().toISOString(),
               updatedAt: new Date().toISOString()
             };
@@ -104,10 +138,14 @@ export const AuthProvider = ({ children }) => {
       
       if (result.success) {
         console.log('Signup successful');
-        setUser(result.user);
+        const userData = {
+          ...result.user,
+          purchasedCourses: result.user.purchasedCourses || [] // ✅ Ensure array exists
+        };
+        setUser(userData);
         // Cache immediately
-        sessionStorage.setItem(`user_${result.user.uid}`, JSON.stringify(result.user));
-        return { success: true, user: result.user };
+        sessionStorage.setItem(`user_${userData.uid}`, JSON.stringify(userData));
+        return { success: true, user: userData };
       } else {
         console.error('Signup failed:', result.error);
         setIsLoading(false);
@@ -133,10 +171,14 @@ export const AuthProvider = ({ children }) => {
       
       if (result.success) {
         console.log('Login successful');
-        setUser(result.user);
+        const userData = {
+          ...result.user,
+          purchasedCourses: result.user.purchasedCourses || [] // ✅ Ensure array exists
+        };
+        setUser(userData);
         // Cache immediately
-        sessionStorage.setItem(`user_${result.user.uid}`, JSON.stringify(result.user));
-        return { success: true, user: result.user };
+        sessionStorage.setItem(`user_${userData.uid}`, JSON.stringify(userData));
+        return { success: true, user: userData };
       } else {
         console.error('Login failed:', result.error);
         setIsLoading(false);
@@ -187,10 +229,14 @@ export const AuthProvider = ({ children }) => {
       
       if (result && result.success) {
         console.log('Profile update successful');
-        setUser(result.user);
+        const userData = {
+          ...result.user,
+          purchasedCourses: result.user.purchasedCourses || user.purchasedCourses || [] // ✅ Preserve purchased courses
+        };
+        setUser(userData);
         // Update cache
-        sessionStorage.setItem(`user_${result.user.uid}`, JSON.stringify(result.user));
-        return { success: true, user: result.user };
+        sessionStorage.setItem(`user_${userData.uid}`, JSON.stringify(userData));
+        return { success: true, user: userData };
       } else {
         const errorMsg = result?.error || 'Failed to update profile';
         console.error('Profile update failed:', errorMsg);
@@ -213,9 +259,10 @@ export const AuthProvider = ({ children }) => {
     login,
     logout,
     updateProfile,
+    refreshUserData, // ✅ Export the new function
     isAuthenticated: !!user,
     authInitialized
-  }), [user, isLoading, signup, login, logout, updateProfile, authInitialized]);
+  }), [user, isLoading, signup, login, logout, updateProfile, refreshUserData, authInitialized]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };

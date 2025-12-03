@@ -1,40 +1,84 @@
-// src/pages/HomePage.jsx - UPDATED WITH FIRESTORE
 import React, { useMemo, useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import CourseCard from '../components/CourseCard';
 import SearchBar from '../components/SearchBar';
-import { getAllCourses } from '../services/courseService';
+import { getAllCourses, subscribeToCoursesUpdates } from '../services/courseService';
+import { initiatePayment } from '../services/razorpayService';
+import { useAuth } from '../context/AuthContext';
+import toast from 'react-hot-toast';
 import logo from '../assets/logo.png';
 
 const HomePage = ({ onCourseClick }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [courses, setCourses] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
+  const { user, refreshUserData } = useAuth(); // ✅ Add refreshUserData from AuthContext
 
-  // Fetch courses from Firestore
+  // Fetch courses from Firestore on component mount
   useEffect(() => {
     const fetchCourses = async () => {
+      setIsLoading(true);
+      setError(null);
+      
       try {
-        setLoading(true);
-        const fetchedCourses = await getAllCourses();
-        setCourses(fetchedCourses);
-        setError(null);
+        console.log('📚 Fetching courses from Firestore...');
+        const result = await getAllCourses();
+        
+        if (result.success) {
+          console.log('✅ Courses fetched successfully:', result.courses.length);
+          
+          // Check if we have courses
+          if (result.courses.length === 0) {
+            console.warn('⚠️ No courses found in Firestore!');
+            setError('No courses available. Please add courses in admin panel.');
+          } else {
+            setCourses(result.courses);
+            console.log('First course:', result.courses[0]);
+          }
+        } else {
+          console.error('❌ Failed to fetch courses:', result.error);
+          setError(result.error || 'Failed to load courses');
+        }
       } catch (err) {
-        console.error('Error loading courses:', err);
-        setError('Failed to load courses. Please try again.');
+        console.error('❌ Error in fetchCourses:', err);
+        setError('An unexpected error occurred');
       } finally {
-        setLoading(false);
+        setIsLoading(false);
       }
     };
 
     fetchCourses();
   }, []);
 
-  const availableCourses = useMemo(() => {
-    return courses.filter((course) => course.isPurchased === false);
-  }, [courses]);
+  // ✅ Refresh courses when user data changes (after purchase)
+  useEffect(() => {
+    console.log('👤 User data updated, refreshing available courses');
+  }, [user?.purchasedCourses]);
 
+  // Get user's purchased course IDs
+  const userPurchasedCourseIds = useMemo(() => {
+    if (!user || !user.purchasedCourses) return [];
+    console.log('🛒 User purchased courses:', user.purchasedCourses);
+    return user.purchasedCourses;
+  }, [user]);
+
+  // Filter courses - show only unpurchased courses
+  const availableCourses = useMemo(() => {
+    const filtered = courses.filter((course) => {
+      // Check if course is not purchased by current user
+      const isNotPurchased = !userPurchasedCourseIds.includes(course.id);
+      if (!isNotPurchased) {
+        console.log('🔒 Course already purchased, hiding from home:', course.id);
+      }
+      return isNotPurchased;
+    });
+    
+    console.log(`📊 Available courses: ${filtered.length} out of ${courses.length}`);
+    return filtered;
+  }, [courses, userPurchasedCourseIds]);
+
+  // Filter courses by search query
   const filteredCourses = useMemo(() => {
     if (!searchQuery.trim()) {
       return availableCourses;
@@ -43,9 +87,9 @@ const HomePage = ({ onCourseClick }) => {
     const query = searchQuery.toLowerCase().trim();
     return availableCourses.filter((course) => {
       return (
-        course.title.toLowerCase().includes(query) ||
-        (course.membershipType && course.membershipType.toLowerCase().includes(query)) ||
-        (course.description && course.description.toLowerCase().includes(query))
+        course.title?.toLowerCase().includes(query) ||
+        course.membershipType?.toLowerCase().includes(query) ||
+        course.description?.toLowerCase().includes(query)
       );
     });
   }, [availableCourses, searchQuery]);
@@ -54,13 +98,62 @@ const HomePage = ({ onCourseClick }) => {
     setSearchQuery('');
   };
 
+  // FIXED: Handle card click to show course details
+  const handleCardClick = (courseId) => {
+    console.log('Card clicked for course:', courseId);
+    // Navigate to course detail page (BuyCourseDetailPage)
+    if (onCourseClick) {
+      onCourseClick(courseId);
+    }
+  };
+
+  // ✅ FIXED: Handle course purchase with user data refresh
+  const handleCoursePurchase = async (courseId) => {
+    if (!user) {
+      toast.error('Please login to purchase courses');
+      return;
+    }
+
+    // Find the course
+    const course = courses.find(c => c.id === courseId);
+    if (!course) {
+      toast.error('Course not found');
+      return;
+    }
+
+    // Check if already purchased
+    if (userPurchasedCourseIds.includes(courseId)) {
+      toast.info('You already own this course');
+      return;
+    }
+
+    console.log('💳 Initiating payment for course:', course);
+
+    // ✅ Initiate Razorpay payment with callback to refresh user data
+    const result = await initiatePayment(course, user, async (updatedUser) => {
+      console.log('✅ Payment successful callback received, refreshing user data');
+      
+      // Refresh user data in AuthContext
+      if (refreshUserData) {
+        await refreshUserData();
+        console.log('✅ User data refreshed in AuthContext');
+      }
+    });
+    
+    if (!result.success) {
+      toast.error('Failed to initiate payment. Please try again.');
+    }
+  };
+
   // Loading state
-  if (loading) {
+  if (isLoading) {
     return (
-      <div className="flex items-center justify-center h-screen bg-gradient-to-br from-gray-50 via-white to-gray-100">
-        <div className="text-center">
-          <div className="w-16 h-16 border-4 border-red-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-gray-600 font-medium">Loading courses...</p>
+      <div className="flex flex-col min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-100">
+        <div className="flex items-center justify-center flex-1">
+          <div className="text-center">
+            <div className="w-16 h-16 border-4 border-red-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+            <p className="text-gray-600 font-medium">Loading courses...</p>
+          </div>
         </div>
       </div>
     );
@@ -69,18 +162,21 @@ const HomePage = ({ onCourseClick }) => {
   // Error state
   if (error) {
     return (
-      <div className="flex items-center justify-center h-screen bg-gradient-to-br from-gray-50 via-white to-gray-100">
-        <div className="text-center">
-          <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
-            <span className="text-red-600 text-2xl">⚠️</span>
+      <div className="flex flex-col min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-100">
+        <div className="flex items-center justify-center flex-1">
+          <div className="text-center">
+            <div className="w-24 h-24 bg-red-100 rounded-full flex items-center justify-center mb-4 mx-auto">
+              <span className="text-4xl">⚠️</span>
+            </div>
+            <p className="text-red-600 font-semibold text-lg mb-2">Failed to load courses</p>
+            <p className="text-gray-600 text-sm">{error}</p>
+            <button
+              onClick={() => window.location.reload()}
+              className="mt-4 px-6 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
+            >
+              Retry
+            </button>
           </div>
-          <p className="text-red-600 font-medium">{error}</p>
-          <button 
-            onClick={() => window.location.reload()} 
-            className="mt-4 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700"
-          >
-            Retry
-          </button>
         </div>
       </div>
     );
@@ -182,7 +278,7 @@ const HomePage = ({ onCourseClick }) => {
                 <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500"></span>
               </motion.span>
               <span className="text-sm font-semibold text-red-700">
-                {courses.length} Courses Available
+                {availableCourses.length} {availableCourses.length === 1 ? 'Course' : 'Courses'} Available
               </span>
             </motion.div>
 
@@ -263,8 +359,10 @@ const HomePage = ({ onCourseClick }) => {
             >
               <span className="text-4xl">📚</span>
             </motion.div>
-            <p className="text-gray-500 text-lg font-semibold">No courses available to buy</p>
-            <p className="text-gray-400 text-sm mt-2">Check back soon for new courses!</p>
+            <p className="text-gray-500 text-lg font-semibold">No courses available</p>
+            <p className="text-gray-400 text-sm mt-2">
+              {courses.length > 0 ? 'You have purchased all available courses! 🎉' : 'Check back soon for new courses!'}
+            </p>
           </motion.div>
         ) : filteredCourses.length === 0 ? (
           <motion.div 
@@ -340,15 +438,21 @@ const HomePage = ({ onCourseClick }) => {
                   <CourseCard
                     courseId={course.id}
                     title={course.title}
+                    courseTitle={course.courseTitle}
+                    courseName={course.courseName}
                     membershipType={course.membershipType}
                     thumbnail={course.thumbnail}
+                    courseThumbnail={course.courseThumbnail}
+                    thumbnailUrl={course.thumbnailUrl}
+                    imageUrl={course.imageUrl}
                     status={course.status}
-                    progress={course.progress}
-                    chapters={course.chapters}
-                    isPurchased={course.isPurchased}
+                    progress={course.progress || 0}
+                    chapters={course.chapters || 0}
+                    isPurchased={false}
                     price={course.price}
                     showStatus={false}
-                    onCourseClick={onCourseClick}
+                    onCourseClick={handleCardClick}
+                    onBuyClick={handleCoursePurchase}
                   />
                 </motion.div>
               ))}
