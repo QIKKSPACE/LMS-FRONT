@@ -1,6 +1,7 @@
-import React, { useState, lazy, Suspense } from 'react';
+import React, { useState, lazy, Suspense, useEffect } from 'react';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import toast, { Toaster } from 'react-hot-toast';
+import { initConsoleCleanup } from './utils/consoleCleanup';
 
 // OPTIMIZATION: Lazy load pages to reduce initial bundle size
 const AuthPage = lazy(() => import('./pages/AuthPage'));
@@ -29,6 +30,11 @@ function AppContent() {
   const [activeNavTab, setActiveNavTab] = useState('home');
   const [selectedCourseId, setSelectedCourseId] = useState(null);
   const [viewMode, setViewMode] = useState(null); // null, 'buy', or 'mycourse'
+
+  // ✅ Initialize console cleanup on mount
+  useEffect(() => {
+    initConsoleCleanup();
+  }, []);
 
   // OPTIMIZATION: Memoize handlers
   const handleTabChange = React.useCallback((tab) => {
