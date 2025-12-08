@@ -1,7 +1,3 @@
-/**
- * BuyCourseDetailPage Component - FIXED VERSION
- * Shows course details with proper thumbnail, price, and working Buy Now button
- */
 import React, { useState, useEffect } from 'react';
 import { ArrowBack, ShoppingCart } from '@mui/icons-material';
 import { getCourseById } from '../services/courseService';

@@ -1,4 +1,3 @@
-// src/services/authService.js - FIXED WITH purchasedCourses
 import { 
   createUserWithEmailAndPassword, 
   signInWithEmailAndPassword, 

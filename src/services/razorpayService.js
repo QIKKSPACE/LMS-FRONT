@@ -4,9 +4,7 @@ import { db } from "../firebase";
 import toast from 'react-hot-toast';
 import { getRazorpayKeyId, COMPANY_INFO, PAYMENT_CONFIG } from '../config/razorpayConfig';
 
-/**
- * Load Razorpay script dynamically
- */
+
 const loadRazorpayScript = () => {
   return new Promise((resolve) => {
     // Check if script already exists
@@ -30,10 +28,7 @@ const loadRazorpayScript = () => {
   });
 };
 
-/**
- * Create a payment order and initiate Razorpay checkout
- * FIXED: Now includes onPaymentSuccess callback to refresh user data
- */
+
 export const initiatePayment = async (courseData, userInfo, onPaymentSuccess = null) => {
   try {
     console.log('=== PAYMENT INITIATION DEBUG ===');
@@ -122,7 +117,7 @@ export const initiatePayment = async (courseData, userInfo, onPaymentSuccess = n
         color: PAYMENT_CONFIG.theme.color,
       },
       
-      // Payment success handler - FIXED VERSION
+      // Payment success handler
       handler: async function (response) {
         console.log('Payment response received:', response);
         
@@ -215,10 +210,7 @@ export const initiatePayment = async (courseData, userInfo, onPaymentSuccess = n
   }
 };
 
-/**
- * Handle successful payment - Save to Firestore
- * FIXED: Now returns updated user data
- */
+
 const handlePaymentSuccess = async (paymentData) => {
   try {
     console.log('Saving payment data to Firestore...');

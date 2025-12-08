@@ -1,4 +1,3 @@
-// src/services/courseService.js - FIXED PROGRESS TRACKING
 import { 
   collection, 
   getDocs, 
@@ -14,9 +13,7 @@ import {
 } from "firebase/firestore";
 import { db } from "../firebase";
 
-/**
- * ✅ FIXED: Transform Firestore course data with correct lecture counting
- */
+
 const transformCourseData = (courseId, firestoreData) => {
   console.log('📄 Transforming course data for:', courseId);
   console.log('📦 Raw Firestore data:', firestoreData);

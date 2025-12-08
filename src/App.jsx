@@ -3,7 +3,6 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 import toast, { Toaster } from 'react-hot-toast';
 import { initConsoleCleanup } from './utils/consoleCleanup';
 
-// OPTIMIZATION: Lazy load pages to reduce initial bundle size
 const AuthPage = lazy(() => import('./pages/AuthPage'));
 const HomePage = lazy(() => import('./pages/HomePage'));
 const MyCoursePage = lazy(() => import('./pages/MyCoursePage'));
@@ -14,7 +13,7 @@ const LiveSessionPage = lazy(() => import('./pages/LiveSessionPage'));
 const BottomNav = lazy(() => import('./components/BottomNav'));
 const SidebarNav = lazy(() => import('./components/SidebarNav'));
 
-// OPTIMIZATION: Lightweight loading spinner component
+
 const LoadingSpinner = () => (
   <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-100 flex items-center justify-center">
     <div className="text-center">
@@ -24,19 +23,18 @@ const LoadingSpinner = () => (
   </div>
 );
 
-// Main App Component wrapped with auth check
+
 function AppContent() {
   const { isAuthenticated, isLoading, authInitialized, user } = useAuth();
   const [activeNavTab, setActiveNavTab] = useState('home');
   const [selectedCourseId, setSelectedCourseId] = useState(null);
-  const [viewMode, setViewMode] = useState(null); // null, 'buy', or 'mycourse'
-
-  // ✅ Initialize console cleanup on mount
+  const [viewMode, setViewMode] = useState(null); 
+ 
   useEffect(() => {
     initConsoleCleanup();
   }, []);
 
-  // OPTIMIZATION: Memoize handlers
+
   const handleTabChange = React.useCallback((tab) => {
     console.log('Tab changed to:', tab);
     setActiveNavTab(tab);
@@ -159,7 +157,7 @@ function AppContent() {
   );
 }
 
-// Root App Component with AuthProvider
+
 function App() {
   return (
     <AuthProvider>
