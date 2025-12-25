@@ -1,7 +1,7 @@
 import { initializeApp } from "firebase/app";
 import { getAuth } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
-
+import { initializeAppCheck, ReCaptchaV3Provider } from "firebase/app-check";
 
 const firebaseConfig = {
     apiKey: "AIzaSyCLhGlh_Taw-aRI7vEQBEzkzrjeuAKUxNc",
@@ -14,34 +14,37 @@ const firebaseConfig = {
     measurementId: "G-79FBF73WJM"
 };
 
-
-const requiredEnvVars = [
-    'VITE_FIREBASE_API_KEY',
-    'VITE_FIREBASE_AUTH_DOMAIN',
-    'VITE_FIREBASE_PROJECT_ID',
-    'VITE_FIREBASE_STORAGE_BUCKET',
-    'VITE_FIREBASE_MESSAGING_SENDER_ID',
-    'VITE_FIREBASE_APP_ID'
-];
-
-const missingVars = requiredEnvVars.filter(varName => !import.meta.env[varName]);
-
-if (missingVars.length > 0) {
-    console.error(' Missing required Firebase environment variables:', missingVars);
-    throw new Error(`Missing Firebase configuration: ${missingVars.join(', ')}`);
-}
-
 // Initialize Firebase
 console.log(' Initializing Firebase...');
 const app = initializeApp(firebaseConfig);
-console.log('Firebase initialized successfully');
+console.log(' Firebase initialized successfully');
 
 // Initialize Auth
 export const auth = getAuth(app);
-console.log('Firebase Auth initialized');
+console.log(' Firebase Auth initialized');
 
 // Initialize Firestore Database
 export const db = getFirestore(app);
-console.log('Firestore Database initialized');
+console.log(' Firestore Database initialized');
+
+//  FIX: Initialize App Check for development
+// This tells Firebase your app is legitimate
+if (typeof window !== 'undefined') {
+  try {
+    console.log(' Initializing Firebase App Check...');
+    
+    // For development/testing - use debug token
+    //  IMPORTANT: In production, get proper reCAPTCHA site key from Firebase Console
+    const appCheck = initializeAppCheck(app, {
+      provider: new ReCaptchaV3Provider('6LcVXXXXXXXXXXXXXXXXXXXXXXXXXXXX'), // Placeholder
+      isTokenAutoRefreshEnabled: true
+    });
+    
+    console.log(' App Check initialized');
+  } catch (error) {
+    console.warn(' App Check initialization failed:', error);
+    console.log(' Continuing without App Check (development mode)');
+  }
+}
 
 export default app;

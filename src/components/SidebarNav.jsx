@@ -49,6 +49,7 @@ const SidebarNav = ({ activeTab, onTabChange }) => {
             <img 
               src={logo} 
               alt="Logo" 
+              style={{ cursor: "pointer" }}
               className="relative h-14 w-14 object-contain flex-shrink-0 rounded-2xl shadow-lg"
             />
           </motion.div>

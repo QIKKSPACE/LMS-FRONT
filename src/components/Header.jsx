@@ -1,15 +1,4 @@
-/**
- * Header Component
- * 
- * Desktop header for Spiritual Talk Foundation branding
- * 
- * React Native Conversion Notes:
- * - Replace <header> with <View> from react-native
- * - Replace <div> with <View> from react-native
- * - Use react-native-vector-icons for icons if needed
- * - sticky → position: 'absolute' or use ScrollView
- * - Use StyleSheet for styling instead of Tailwind classes
- */
+
 import React from 'react';
 
 const Header = () => {

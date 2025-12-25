@@ -14,8 +14,8 @@ import {
 import { db } from "../firebase";
 
 
-const transformCourseData = (courseId, firestoreData) => {
-  console.log('📄 Transforming course data for:', courseId);
+const transformCourseData = (courseId, firestoreData, isOverlay = false) => {
+  console.log('📄 Transforming course data for:', courseId, 'isOverlay:', isOverlay);
   console.log('📦 Raw Firestore data:', firestoreData);
   
   // ✅ Extract sections from courseContent array
@@ -98,10 +98,14 @@ const transformCourseData = (courseId, firestoreData) => {
     createdAt: firestoreData.createdAt?.toDate?.()?.toISOString() || firestoreData.createdAt || null,
     updatedAt: firestoreData.updatedAt?.toDate?.()?.toISOString() || firestoreData.updatedAt || null,
     
+    // Validity (for overlay courses)
+    courseValidity: firestoreData.courseValidity || '1',
+    
     // Purchase/Progress (will be set based on user data)
     status: 'NOT_STARTED',
     progress: 0,
     isPurchased: false,
+    isOverlay: isOverlay, // Track if this is an overlay course
   };
 };
 
@@ -117,7 +121,7 @@ export const getAllCourses = async () => {
     
     const courses = [];
     coursesSnapshot.forEach((doc) => {
-      const courseData = transformCourseData(doc.id, doc.data());
+      const courseData = transformCourseData(doc.id, doc.data(), false);
       courses.push(courseData);
     });
 
@@ -143,19 +147,29 @@ export const getAllCourses = async () => {
 };
 
 /**
- * Fetch a single course by ID
+ * ✅ NEW: Fetch a course from either courses or overlayCourses collection
  */
 export const getCourseById = async (courseId) => {
   try {
     console.log('🔍 Fetching course:', courseId);
 
-    const courseDocRef = doc(db, 'courses', courseId);
-    const courseDocSnap = await getDoc(courseDocRef);
+    // Try regular courses collection first
+    let courseDocRef = doc(db, 'courses', courseId);
+    let courseDocSnap = await getDoc(courseDocRef);
+    let isOverlay = false;
+
+    // If not found, try overlayCourses collection
+    if (!courseDocSnap.exists()) {
+      console.log('📍 Course not in "courses", checking "overlayCourses"...');
+      courseDocRef = doc(db, 'overlayCourses', courseId);
+      courseDocSnap = await getDoc(courseDocRef);
+      isOverlay = true;
+    }
 
     if (courseDocSnap.exists()) {
-      const courseData = transformCourseData(courseDocSnap.id, courseDocSnap.data());
+      const courseData = transformCourseData(courseDocSnap.id, courseDocSnap.data(), isOverlay);
       
-      console.log('✅ Course found:', courseId);
+      console.log('✅ Course found:', courseId, 'isOverlay:', isOverlay);
       console.log('📸 Thumbnail URL:', courseData.courseThumbnail);
       console.log('💰 Price:', courseData.price);
       console.log('📚 Sections:', courseData.sections?.length || 0);
@@ -166,7 +180,7 @@ export const getCourseById = async (courseId) => {
         course: courseData
       };
     } else {
-      console.log('❌ Course not found:', courseId);
+      console.log('❌ Course not found in either collection:', courseId);
       return {
         success: false,
         error: 'Course not found'
@@ -182,7 +196,7 @@ export const getCourseById = async (courseId) => {
 };
 
 /**
- * ✅ FIXED: Get course progress with correct calculation
+ * ✅ Get course progress with correct calculation
  */
 export const getCourseProgress = async (userId, courseId) => {
   try {
@@ -220,7 +234,7 @@ export const getCourseProgress = async (userId, courseId) => {
 };
 
 /**
- * ✅ FIXED: Toggle lecture completion with correct progress calculation
+ * ✅ Toggle lecture completion with correct progress calculation
  */
 export const toggleLectureCompletion = async (userId, courseId, sectionId, lectureId) => {
   try {
@@ -332,7 +346,7 @@ export const toggleLectureCompletion = async (userId, courseId, sectionId, lectu
       completedLectures: updatedLectures,
       progress: progress,
       status: status,
-      totalLectures: totalLectures, // ✅ Also update totalLectures in case it was recalculated
+      totalLectures: totalLectures,
       lastAccessedAt: new Date().toISOString(),
     });
 
@@ -347,7 +361,7 @@ export const toggleLectureCompletion = async (userId, courseId, sectionId, lectu
 };
 
 /**
- * ✅ FIXED: Enroll user with correct totalLectures count
+ * ✅ Enroll user with correct totalLectures count
  */
 export const enrollInCourse = async (userId, courseId, expiryDate = null) => {
   try {
@@ -402,7 +416,7 @@ export const enrollInCourse = async (userId, courseId, expiryDate = null) => {
       progress: 0,
       status: 'IN_PROGRESS',
       completedLectures: [],
-      totalLectures: totalLectures, // ✅ FIXED: Use correct count
+      totalLectures: totalLectures,
       enrolledAt: new Date().toISOString(),
       lastAccessedAt: new Date().toISOString(),
       expiryDate: expiryDate,
@@ -426,13 +440,15 @@ export const enrollInCourse = async (userId, courseId, expiryDate = null) => {
 };
 
 /**
- * Fetch courses purchased by a specific user
+ * ✅ COMPLETELY REWRITTEN: Fetch courses purchased by a user
+ * NOW SUPPORTS BOTH purchasedCourses AND EnrolledCourses
+ * NOW CHECKS BOTH courses AND overlayCourses COLLECTIONS
  */
 export const getUserCourses = async (userId) => {
   try {
     console.log('👤 Fetching courses for user:', userId);
 
-    // First, get user's purchased courses from their profile
+    // First, get user's data
     const userDocRef = doc(db, 'users', userId);
     const userDocSnap = await getDoc(userDocRef);
 
@@ -442,22 +458,38 @@ export const getUserCourses = async (userId) => {
     }
 
     const userData = userDocSnap.data();
+    
+    // ✅ CRITICAL: Get course IDs from BOTH sources
     const purchasedCourseIds = userData.purchasedCourses || [];
+    const enrolledCourses = userData.EnrolledCourses || [];
+    
+    // Extract course IDs from EnrolledCourses
+    const enrolledCourseIds = enrolledCourses.map(ec => ec.courseId).filter(Boolean);
+    
+    // ✅ Combine both arrays and remove duplicates
+    const allCourseIds = [...new Set([...purchasedCourseIds, ...enrolledCourseIds])];
 
-    if (purchasedCourseIds.length === 0) {
-      console.log('ℹ️ User has no purchased courses');
+    console.log('🛒 Purchased course IDs:', purchasedCourseIds);
+    console.log('📝 Enrolled course IDs:', enrolledCourseIds);
+    console.log('🎯 Combined unique course IDs:', allCourseIds);
+
+    if (allCourseIds.length === 0) {
+      console.log('ℹ️ User has no purchased or enrolled courses');
       return { success: true, courses: [] };
     }
 
-    console.log('🛒 User purchased course IDs:', purchasedCourseIds);
-
-    // Fetch all purchased courses with their progress
+    // ✅ Fetch all courses with their progress
     const courses = [];
-    for (const courseId of purchasedCourseIds) {
+    for (const courseId of allCourseIds) {
+      // Use the updated getCourseById that checks both collections
       const result = await getCourseById(courseId);
+      
       if (result.success) {
         // Get progress for this course
         const progressResult = await getCourseProgress(userId, courseId);
+        
+        // Check if this course came from EnrolledCourses to get expiry date
+        const enrollmentData = enrolledCourses.find(ec => ec.courseId === courseId);
         
         if (progressResult.success && progressResult.progress) {
           // Merge progress with course data
@@ -465,26 +497,33 @@ export const getUserCourses = async (userId) => {
             ...result.course,
             progress: progressResult.progress.progress || 0,
             status: progressResult.progress.status || 'IN_PROGRESS',
-            expiryDate: progressResult.progress.expiryDate || null,
+            expiryDate: progressResult.progress.expiryDate || enrollmentData?.expiryDate || null,
+            purchaseDate: enrollmentData?.purchaseDate || enrollmentData?.assignedAt || null,
             isPurchased: true,
           };
           
-          console.log(`✅ Course ${courseId}: ${courseWithProgress.progress}% (${courseWithProgress.status})`);
+          console.log(`✅ Course ${courseId}: ${courseWithProgress.progress}% (${courseWithProgress.status}) - isOverlay: ${result.course.isOverlay}`);
           courses.push(courseWithProgress);
         } else {
           // No progress yet, add with defaults
-          console.log(`⚠️ No progress for course ${courseId}, using defaults`);
+          console.log(`⚠️ No progress for course ${courseId}, using defaults - isOverlay: ${result.course.isOverlay}`);
           courses.push({
             ...result.course,
             progress: 0,
             status: 'NOT_STARTED',
+            expiryDate: enrollmentData?.expiryDate || null,
+            purchaseDate: enrollmentData?.purchaseDate || enrollmentData?.assignedAt || null,
             isPurchased: true,
           });
         }
+      } else {
+        console.warn(`⚠️ Could not fetch course ${courseId}:`, result.error);
       }
     }
 
-    console.log(`✅ Fetched ${courses.length} purchased courses for user`);
+    console.log(`✅ Successfully fetched ${courses.length} courses for user`);
+    console.log(`📊 Course types: ${courses.filter(c => c.isOverlay).length} overlay, ${courses.filter(c => !c.isOverlay).length} regular`);
+    
     return { success: true, courses };
   } catch (error) {
     console.error("❌ Error fetching user courses:", error);
@@ -506,7 +545,7 @@ export const subscribeToCoursesUpdates = (callback) => {
     const unsubscribe = onSnapshot(coursesCollection, (snapshot) => {
       const courses = [];
       snapshot.forEach((doc) => {
-        const courseData = transformCourseData(doc.id, doc.data());
+        const courseData = transformCourseData(doc.id, doc.data(), false);
         courses.push(courseData);
       });
 
@@ -538,7 +577,7 @@ export const getCoursesByCategory = async (category) => {
     
     const courses = [];
     coursesSnapshot.forEach((doc) => {
-      const courseData = transformCourseData(doc.id, doc.data());
+      const courseData = transformCourseData(doc.id, doc.data(), false);
       courses.push(courseData);
     });
 

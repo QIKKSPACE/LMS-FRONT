@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { Person, Phone, LocationOn, Edit, Save, Cancel, Security, Email } from '@mui/icons-material';
+import { Person, Phone, LocationOn, Edit, Save, Cancel, Security, Email, CheckCircle } from '@mui/icons-material';
 import { useAuth } from '../context/AuthContext';
+// Switch to email OTP for more reliable verification
+import { sendEmailOTP, verifyEmailOTP, cleanupEmailOTP } from '../services/emailOTPService';
 import toast from 'react-hot-toast';
 import logo from '../assets/logo.png';
 
@@ -13,10 +15,16 @@ const ProfilePage = () => {
     email: '',
     address: ''
   });
-  const [message, setMessage] = useState({ type: '', text: '' });
   const [isSaving, setIsSaving] = useState(false);
+  
+  // Phone verification states
+  const [isVerifyingPhone, setIsVerifyingPhone] = useState(false);
+  const [otpSent, setOtpSent] = useState(false);
+  const [otp, setOtp] = useState('');
+  const [verificationId, setVerificationId] = useState(null);
+  const [isVerifyingOTP, setIsVerifyingOTP] = useState(false);
+  const [phoneVerified, setPhoneVerified] = useState(false);
 
-  // Load user data when component mounts or user changes
   useEffect(() => {
     if (user) {
       console.log('Loading user data:', user);
@@ -26,65 +34,48 @@ const ProfilePage = () => {
         email: user.email || '',
         address: user.address || ''
       });
+      // Check if phone is already verified
+      setPhoneVerified(user.phoneVerified || false);
     }
   }, [user]);
 
-  // Privacy protection: Prevent screenshots and screen recording
+  // Privacy protection
   useEffect(() => {
-    if (isEditing) {
-      // Allow editing, so disable protections
-      return;
-    }
+    if (isEditing) return;
 
-    // Disable keyboard shortcuts for screenshots and dev tools (only when profile is visible)
     const handleKeyDown = (e) => {
-      // Disable F12 (DevTools)
       if (e.key === 'F12') {
         e.preventDefault();
         alert('Developer tools are disabled on this page for security reasons.');
         return false;
       }
-
-      // Disable Ctrl+Shift+I (DevTools)
       if (e.ctrlKey && e.shiftKey && (e.key === 'I' || e.key === 'i')) {
         e.preventDefault();
         alert('Developer tools are disabled on this page for security reasons.');
         return false;
       }
-
-      // Disable Ctrl+Shift+J (Console)
       if (e.ctrlKey && e.shiftKey && (e.key === 'J' || e.key === 'j')) {
         e.preventDefault();
         alert('Developer tools are disabled on this page for security reasons.');
         return false;
       }
-
-      // Disable Ctrl+Shift+C (Element Inspector)
       if (e.ctrlKey && e.shiftKey && (e.key === 'C' || e.key === 'c')) {
         e.preventDefault();
         return false;
       }
-
-      // Disable Ctrl+U (View Source)
       if (e.ctrlKey && (e.key === 'U' || e.key === 'u')) {
         e.preventDefault();
         return false;
       }
-
-      // Disable Print Screen (Windows/Linux) - Note: Limited effectiveness
       if (e.key === 'PrintScreen') {
         e.preventDefault();
         alert('Screenshots are not allowed on this page.');
         return false;
       }
-
-      // Disable Ctrl+S (Save Page)
       if (e.ctrlKey && (e.key === 'S' || e.key === 's')) {
         e.preventDefault();
         return false;
       }
-
-      // Disable Ctrl+P (Print)
       if (e.ctrlKey && (e.key === 'P' || e.key === 'p')) {
         e.preventDefault();
         alert('Printing is not allowed on this page.');
@@ -92,10 +83,7 @@ const ProfilePage = () => {
       }
     };
 
-    // Add event listener for keyboard shortcuts
     window.addEventListener('keydown', handleKeyDown, true);
-
-    // Cleanup
     return () => {
       window.removeEventListener('keydown', handleKeyDown, true);
     };
@@ -103,25 +91,141 @@ const ProfilePage = () => {
 
   const handleEdit = () => {
     setIsEditing(true);
+    setOtpSent(false);
+    setOtp('');
+  };
+
+  const handleMobileNumberChange = (e) => {
+    const value = e.target.value;
+    const numericValue = value.replace(/\D/g, '');
+    const limitedValue = numericValue.slice(0, 10);
+    
+    setEditedData(prev => ({
+      ...prev,
+      mobileNumber: limitedValue
+    }));
+    
+    // Reset verification states when number changes
+    setOtpSent(false);
+    setOtp('');
+    setPhoneVerified(false);
+  };
+
+  // ✅ Request OTP - Using Email OTP (more reliable)
+  const handleRequestOTP = async () => {
+    if (!editedData.mobileNumber || editedData.mobileNumber.length !== 10) {
+      toast.error('Please enter a valid 10-digit mobile number');
+      return;
+    }
+
+    // Prevent multiple clicks
+    if (isVerifyingPhone) {
+      console.log('⚠️ Already requesting OTP, please wait...');
+      return;
+    }
+
+    try {
+      setIsVerifyingPhone(true);
+      console.log('📱 Requesting OTP for:', editedData.mobileNumber);
+
+      // Show loading toast
+      const loadingToast = toast.loading('Generating OTP...');
+
+      const result = await sendEmailOTP(editedData.mobileNumber);
+      
+      toast.dismiss(loadingToast);
+      
+      if (result.success) {
+        setVerificationId('email-otp');
+        setOtpSent(true);
+        
+        // Show OTP in development
+        if (result.otp) {
+          toast.success(
+            `🔐 Development Mode\nYour OTP: ${result.otp}\n(Check console for details)`,
+            { duration: 10000 }
+          );
+        } else {
+          toast.success('✅ OTP sent! Check console for OTP.');
+        }
+        
+        console.log('✅ OTP generated successfully');
+      } else {
+        toast.error(result.error || 'Failed to generate OTP');
+        console.error('❌ Failed to generate OTP:', result.error);
+      }
+    } catch (error) {
+      console.error('❌ Error requesting OTP:', error);
+      toast.error('Failed to generate OTP. Please try again.');
+    } finally {
+      setIsVerifyingPhone(false);
+    }
+  };
+
+  // ✅ Verify OTP - Using Email OTP
+  const handleVerifyOTP = async () => {
+    if (!otp || otp.length !== 6) {
+      toast.error('Please enter the 6-digit OTP');
+      return;
+    }
+
+    try {
+      setIsVerifyingOTP(true);
+      console.log('🔐 Verifying OTP...');
+
+      const result = await verifyEmailOTP(editedData.mobileNumber, otp);
+      
+      if (result.success) {
+        setPhoneVerified(true);
+        toast.success('✅ Phone number verified successfully!');
+        console.log('✅ Phone verified');
+      } else {
+        toast.error(result.error || 'Invalid OTP');
+        console.error('❌ OTP verification failed:', result.error);
+      }
+    } catch (error) {
+      console.error('❌ Error verifying OTP:', error);
+      toast.error('Failed to verify OTP. Please try again.');
+    } finally {
+      setIsVerifyingOTP(false);
+    }
   };
 
   const handleSave = async () => {
     console.log('Attempting to save profile:', editedData);
     
-    // Validation
     if (!editedData.name.trim()) {
       toast.error('Name is required');
       return;
     }
 
+    // If mobile number is provided, it must be verified
+    if (editedData.mobileNumber.trim()) {
+      if (editedData.mobileNumber.length !== 10) {
+        toast.error('Mobile number must be exactly 10 digits');
+        return;
+      }
+      
+      if (!/^\d{10}$/.test(editedData.mobileNumber)) {
+        toast.error('Mobile number must contain only digits');
+        return;
+      }
+
+      // Check if number changed and needs verification
+      if (editedData.mobileNumber !== user.mobileNumber && !phoneVerified) {
+        toast.error('Please verify your mobile number with OTP before saving');
+        return;
+      }
+    }
+
     setIsSaving(true);
 
     try {
-      // Only send fields that can be updated (exclude email and uid)
       const updates = {
         name: editedData.name.trim(),
         mobileNumber: editedData.mobileNumber.trim(),
-        address: editedData.address.trim()
+        address: editedData.address.trim(),
+        phoneVerified: phoneVerified || user.phoneVerified || false
       };
 
       console.log('Sending updates:', updates);
@@ -133,6 +237,8 @@ const ProfilePage = () => {
       if (result && result.success) {
         toast.success('Profile updated successfully!');
         setIsEditing(false);
+        setOtpSent(false);
+        setOtp('');
       } else {
         const errorMessage = result?.error || 'Failed to update profile';
         console.error('Update failed:', errorMessage);
@@ -147,7 +253,6 @@ const ProfilePage = () => {
   };
 
   const handleCancel = () => {
-    // Reset to original user data
     if (user) {
       setEditedData({
         name: user.name || '',
@@ -155,8 +260,16 @@ const ProfilePage = () => {
         email: user.email || '',
         address: user.address || ''
       });
+      setPhoneVerified(user.phoneVerified || false);
     }
     setIsEditing(false);
+    setOtpSent(false);
+    setOtp('');
+    
+    // Clean up OTP when canceling
+    if (editedData.mobileNumber) {
+      cleanupEmailOTP(editedData.mobileNumber);
+    }
   };
 
   const handleChange = (e) => {
@@ -345,22 +458,98 @@ const ProfilePage = () => {
                 </div>
               </div>
 
-              {/* Mobile Number */}
+              {/* Mobile Number with OTP Verification */}
               <div className="flex items-start space-x-4 p-4 bg-gray-50 rounded-lg">
                 <div className="flex-shrink-0 mt-1">
                   <Phone style={{ fontSize: '24px', color: '#dc2626' }} />
                 </div>
                 <div className="flex-1">
-                  <p className="text-sm font-medium text-gray-500 mb-1">Mobile Number</p>
+                  <div className="flex items-center gap-2 mb-1">
+                    <p className="text-sm font-medium text-gray-500">Mobile Number</p>
+                    {phoneVerified && (
+                      <div className="flex items-center gap-1 px-2 py-0.5 bg-green-100 rounded-full">
+                        <CheckCircle style={{ fontSize: '14px', color: '#10b981' }} />
+                        <span className="text-xs text-green-700 font-semibold">Verified</span>
+                      </div>
+                    )}
+                  </div>
+                  
                   {isEditing ? (
-                    <input
-                      type="tel"
-                      name="mobileNumber"
-                      value={editedData.mobileNumber}
-                      onChange={handleChange}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500 outline-none bg-white"
-                      placeholder="Enter your mobile number"
-                    />
+                    <div className="space-y-3">
+                      {/* Phone Number Input */}
+                      <div className="flex gap-2">
+                        <input
+                          type="text"
+                          inputMode="numeric"
+                          name="mobileNumber"
+                          value={editedData.mobileNumber}
+                          onChange={handleMobileNumberChange}
+                          maxLength={10}
+                          className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500 outline-none bg-white"
+                          placeholder="Enter 10-digit mobile number"
+                          disabled={otpSent}
+                        />
+                        {!otpSent && editedData.mobileNumber.length === 10 && (
+                          <button
+                            onClick={handleRequestOTP}
+                            disabled={isVerifyingPhone}
+                            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap text-sm font-semibold"
+                          >
+                            {isVerifyingPhone ? 'Sending...' : 'Send OTP'}
+                          </button>
+                        )}
+                      </div>
+                      
+                      <p className="text-xs text-gray-500">
+                        {editedData.mobileNumber.length}/10 digits
+                      </p>
+
+                      {/* OTP Input */}
+                      {otpSent && !phoneVerified && (
+                        <div className="space-y-2 pt-2 border-t border-gray-200">
+                          <p className="text-sm text-green-600 font-medium">
+                            ✅ OTP generated for +91 {editedData.mobileNumber}
+                          </p>
+                          <p className="text-xs text-blue-600 font-medium">
+                            📝 Development Mode: Check console or toast notification for OTP
+                          </p>
+                          <div className="flex gap-2">
+                            <input
+                              type="text"
+                              inputMode="numeric"
+                              value={otp}
+                              onChange={(e) => setOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                              maxLength={6}
+                              className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none bg-white"
+                              placeholder="Enter 6-digit OTP"
+                            />
+                            <button
+                              onClick={handleVerifyOTP}
+                              disabled={isVerifyingOTP || otp.length !== 6}
+                              className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap text-sm font-semibold"
+                            >
+                              {isVerifyingOTP ? 'Verifying...' : 'Verify'}
+                            </button>
+                          </div>
+                          <p className="text-xs text-gray-500">
+                            {otp.length}/6 digits
+                          </p>
+                          <button
+                            onClick={handleRequestOTP}
+                            disabled={isVerifyingPhone}
+                            className="text-sm text-blue-600 hover:text-blue-700 font-medium"
+                          >
+                            Resend OTP
+                          </button>
+                        </div>
+                      )}
+
+                      {phoneVerified && (
+                        <p className="text-sm text-green-600 font-medium">
+                          ✅ Phone number verified! You can now save your profile.
+                        </p>
+                      )}
+                    </div>
                   ) : (
                     <p 
                       className="text-lg text-gray-900"

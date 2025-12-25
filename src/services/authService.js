@@ -16,11 +16,9 @@ import { auth, db } from "../firebase";
 
 /**
  * Sign up a new user with email and password
- * Also creates user profile in Firestore Database
  */
 export const signupUser = async (name, email, password) => {
   try {
-    // Validate inputs
     if (!name || !email || !password) {
       return {
         success: false,
@@ -37,35 +35,32 @@ export const signupUser = async (name, email, password) => {
 
     console.log('Creating user with email:', email);
 
-    // Create user in Firebase Authentication
     const userCredential = await createUserWithEmailAndPassword(auth, email, password);
     const user = userCredential.user;
 
     console.log('User created successfully:', user.uid);
 
-    // Update display name in Firebase Auth
     await updateFirebaseProfile(user, {
       displayName: name
     });
 
-    // ✅ Create user profile in Firestore Database with purchasedCourses
+    // ✅ Create user profile with phoneVerified field
     const userProfile = {
       uid: user.uid,
       name: name,
       email: email,
       mobileNumber: '',
+      phoneVerified: false, // ✅ New field
       address: '',
-      purchasedCourses: [], // ✅ Initialize empty array
+      purchasedCourses: [],
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp()
     };
 
-    // Store in Firestore at collection: users, document: userId
     await setDoc(doc(db, 'users', user.uid), userProfile);
 
     console.log('User profile created in Firestore');
 
-    // Return profile with ISO string timestamps for consistency
     return { 
       success: true, 
       user: {
@@ -76,9 +71,6 @@ export const signupUser = async (name, email, password) => {
     };
   } catch (error) {
     console.error("Signup error:", error);
-    console.error("Error code:", error.code);
-    console.error("Error message:", error.message);
-    
     return { 
       success: false, 
       error: getErrorMessage(error.code) 
@@ -91,7 +83,6 @@ export const signupUser = async (name, email, password) => {
  */
 export const loginUser = async (email, password) => {
   try {
-    // Validate inputs
     if (!email || !password) {
       return {
         success: false,
@@ -99,19 +90,16 @@ export const loginUser = async (email, password) => {
       };
     }
 
-    // Trim whitespace from email and password
     const trimmedEmail = email.trim();
     const trimmedPassword = password.trim();
 
     console.log('Login attempt for:', trimmedEmail);
 
-    // Sign in with Firebase Authentication
     const userCredential = await signInWithEmailAndPassword(auth, trimmedEmail, trimmedPassword);
     const user = userCredential.user;
 
     console.log('User signed in successfully:', user.uid);
 
-    // Fetch user profile from Firestore
     const userDocRef = doc(db, 'users', user.uid);
     const userDocSnap = await getDoc(userDocRef);
 
@@ -119,15 +107,16 @@ export const loginUser = async (email, password) => {
       console.log('User profile found in Firestore');
       const userProfile = userDocSnap.data();
       
-      // ✅ Ensure purchasedCourses exists
+      // ✅ Ensure phoneVerified exists
       const completeProfile = {
         ...userProfile,
         purchasedCourses: userProfile.purchasedCourses || [],
+        phoneVerified: userProfile.phoneVerified || false, // ✅ New field
         createdAt: userProfile.createdAt?.toDate?.()?.toISOString() || new Date().toISOString(),
         updatedAt: userProfile.updatedAt?.toDate?.()?.toISOString() || new Date().toISOString()
       };
       
-      console.log('✅ User purchased courses:', completeProfile.purchasedCourses.length);
+      console.log('✅ User phone verified:', completeProfile.phoneVerified);
       
       return { 
         success: true, 
@@ -135,14 +124,15 @@ export const loginUser = async (email, password) => {
       };
     } else {
       console.log('User profile not found, creating new one');
-      // ✅ Profile doesn't exist, create one with purchasedCourses
+      // ✅ Create profile with phoneVerified
       const userProfile = {
         uid: user.uid,
         name: user.displayName || trimmedEmail.split('@')[0],
         email: user.email,
         mobileNumber: '',
+        phoneVerified: false, // ✅ New field
         address: '',
-        purchasedCourses: [], // ✅ Initialize empty array
+        purchasedCourses: [],
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp()
       };
@@ -160,9 +150,6 @@ export const loginUser = async (email, password) => {
     }
   } catch (error) {
     console.error("Login error:", error);
-    console.error("Error code:", error.code);
-    console.error("Error message:", error.message);
-    
     return { 
       success: false, 
       error: getErrorMessage(error.code) 
@@ -188,7 +175,7 @@ export const logoutUser = async () => {
 };
 
 /**
- * Update user profile in Firestore
+ * ✅ UPDATED: Update user profile with phoneVerified support
  */
 export const updateUserProfile = async (userId, updates) => {
   try {
@@ -213,7 +200,6 @@ export const updateUserProfile = async (userId, updates) => {
 
     const userDocRef = doc(db, 'users', userId);
     
-    // First check if user exists
     const userDocSnap = await getDoc(userDocRef);
     if (!userDocSnap.exists()) {
       console.error('User not found in Firestore');
@@ -223,7 +209,7 @@ export const updateUserProfile = async (userId, updates) => {
       };
     }
 
-    // Add updatedAt timestamp
+    // ✅ Include phoneVerified in updates
     const updateData = {
       ...updates,
       updatedAt: serverTimestamp()
@@ -234,19 +220,19 @@ export const updateUserProfile = async (userId, updates) => {
 
     console.log('Profile updated successfully in Firestore');
 
-    // Fetch updated profile
     const updatedDocSnap = await getDoc(userDocRef);
     
     if (updatedDocSnap.exists()) {
       const updatedUser = updatedDocSnap.data();
       console.log('Fetched updated user profile:', updatedUser);
       
-      // ✅ Convert Firestore timestamps to ISO strings and ensure purchasedCourses exists
+      // ✅ Ensure phoneVerified is included
       return { 
         success: true, 
         user: {
           ...updatedUser,
           purchasedCourses: updatedUser.purchasedCourses || [],
+          phoneVerified: updatedUser.phoneVerified || false, // ✅ New field
           createdAt: updatedUser.createdAt?.toDate?.()?.toISOString() || new Date().toISOString(),
           updatedAt: updatedUser.updatedAt?.toDate?.()?.toISOString() || new Date().toISOString()
         }
@@ -260,9 +246,6 @@ export const updateUserProfile = async (userId, updates) => {
     }
   } catch (error) {
     console.error("Update profile error:", error);
-    console.error("Error code:", error.code);
-    console.error("Error message:", error.message);
-    
     return { 
       success: false, 
       error: `Failed to update profile: ${error.message}` 
@@ -291,15 +274,16 @@ export const getUserProfile = async (userId) => {
       console.log('User profile fetched successfully');
       const userData = userDocSnap.data();
       
-      // ✅ Convert Firestore timestamps to ISO strings and ensure purchasedCourses exists
+      // ✅ Ensure phoneVerified exists
       const completeProfile = {
         ...userData,
         purchasedCourses: userData.purchasedCourses || [],
+        phoneVerified: userData.phoneVerified || false, // ✅ New field
         createdAt: userData.createdAt?.toDate?.()?.toISOString() || new Date().toISOString(),
         updatedAt: userData.updatedAt?.toDate?.()?.toISOString() || new Date().toISOString()
       };
       
-      console.log('✅ Purchased courses count:', completeProfile.purchasedCourses.length);
+      console.log('✅ Phone verified status:', completeProfile.phoneVerified);
       
       return { 
         success: true, 
