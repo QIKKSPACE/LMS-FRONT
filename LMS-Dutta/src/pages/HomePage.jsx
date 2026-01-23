@@ -2,20 +2,19 @@ import React, { useMemo, useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import CourseCard from '../components/CourseCard';
 import SearchBar from '../components/SearchBar';
-import { getAllCourses, subscribeToCoursesUpdates } from '../services/courseService';
+import { getAllCourses } from '../services/courseService';
 import { initiatePayment } from '../services/razorpayService';
 import { useAuth } from '../context/AuthContext';
 import toast from 'react-hot-toast';
 import logo from '../assets/logo.png';
 
-const HomePage = ({ onCourseClick }) => {
+const HomePage = ({ onCourseClick, onLogoClick }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [courses, setCourses] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
-  const { user, refreshUserData } = useAuth(); // ✅ Add refreshUserData from AuthContext
+  const { user, refreshUserData } = useAuth();
 
-  // Fetch courses from Firestore on component mount
   useEffect(() => {
     const fetchCourses = async () => {
       setIsLoading(true);
@@ -28,13 +27,11 @@ const HomePage = ({ onCourseClick }) => {
         if (result.success) {
           console.log('✅ Courses fetched successfully:', result.courses.length);
           
-          // Check if we have courses
           if (result.courses.length === 0) {
             console.warn('⚠️ No courses found in Firestore!');
             setError('No courses available. Please add courses in admin panel.');
           } else {
             setCourses(result.courses);
-            console.log('First course:', result.courses[0]);
           }
         } else {
           console.error('❌ Failed to fetch courses:', result.error);
@@ -51,25 +48,21 @@ const HomePage = ({ onCourseClick }) => {
     fetchCourses();
   }, []);
 
-  // ✅ Refresh courses when user data changes (after purchase)
   useEffect(() => {
     console.log('👤 User data updated, refreshing available courses');
   }, [user?.purchasedCourses]);
 
-  // Get user's purchased course IDs
   const userPurchasedCourseIds = useMemo(() => {
     if (!user || !user.purchasedCourses) return [];
     console.log('🛒 User purchased courses:', user.purchasedCourses);
     return user.purchasedCourses;
   }, [user]);
 
-  // Filter courses - show only unpurchased courses
   const availableCourses = useMemo(() => {
     const filtered = courses.filter((course) => {
-      // Check if course is not purchased by current user
       const isNotPurchased = !userPurchasedCourseIds.includes(course.id);
       if (!isNotPurchased) {
-        console.log('🔒 Course already purchased, hiding from home:', course.id);
+        console.log('🔒 Course already purchased, hiding:', course.id);
       }
       return isNotPurchased;
     });
@@ -78,7 +71,6 @@ const HomePage = ({ onCourseClick }) => {
     return filtered;
   }, [courses, userPurchasedCourseIds]);
 
-  // Filter courses by search query
   const filteredCourses = useMemo(() => {
     if (!searchQuery.trim()) {
       return availableCourses;
@@ -98,42 +90,48 @@ const HomePage = ({ onCourseClick }) => {
     setSearchQuery('');
   };
 
-  // FIXED: Handle card click to show course details
   const handleCardClick = (courseId) => {
     console.log('Card clicked for course:', courseId);
-    // Navigate to course detail page (BuyCourseDetailPage)
     if (onCourseClick) {
       onCourseClick(courseId);
     }
   };
 
-  // ✅ FIXED: Handle course purchase with user data refresh
   const handleCoursePurchase = async (courseId) => {
     if (!user) {
       toast.error('Please login to purchase courses');
       return;
     }
 
-    // Find the course
     const course = courses.find(c => c.id === courseId);
     if (!course) {
       toast.error('Course not found');
       return;
     }
 
-    // Check if already purchased
     if (userPurchasedCourseIds.includes(courseId)) {
       toast.info('You already own this course');
       return;
     }
 
-    console.log('💳 Initiating payment for course:', course);
+    console.log('💳 Initiating payment for course:', {
+      id: course.id,
+      title: course.courseTitle,
+      validity: course.courseValidity
+    });
 
-    // ✅ Initiate Razorpay payment with callback to refresh user data
-    const result = await initiatePayment(course, user, async (updatedUser) => {
-      console.log('✅ Payment successful callback received, refreshing user data');
+    const courseDataForPayment = {
+      id: course.id,
+      title: course.courseTitle || course.title,
+      price: course.price || 0,
+      thumbnail: course.courseThumbnail || course.thumbnail,
+      description: course.courseDescription || course.description,
+      courseValidity: course.courseValidity || '1',
+    };
+
+    const result = await initiatePayment(courseDataForPayment, user, async (updatedUser) => {
+      console.log('✅ Payment successful callback received');
       
-      // Refresh user data in AuthContext
       if (refreshUserData) {
         await refreshUserData();
         console.log('✅ User data refreshed in AuthContext');
@@ -145,7 +143,6 @@ const HomePage = ({ onCourseClick }) => {
     }
   };
 
-  // Loading state
   if (isLoading) {
     return (
       <div className="flex flex-col min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-100">
@@ -159,7 +156,6 @@ const HomePage = ({ onCourseClick }) => {
     );
   }
 
-  // Error state
   if (error) {
     return (
       <div className="flex flex-col min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-100">
@@ -184,7 +180,6 @@ const HomePage = ({ onCourseClick }) => {
 
   return (
     <div className="flex flex-col min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-100 overflow-hidden">
-      {/* Mobile Header */}
       <motion.div 
         className="lg:hidden bg-white/95 backdrop-blur-sm shadow-sm sticky top-0 z-30"
         initial={{ y: -50, opacity: 0 }}
@@ -194,27 +189,20 @@ const HomePage = ({ onCourseClick }) => {
         <div className="flex flex-row items-center justify-between px-4 py-4">
           <motion.h1 
             className="text-2xl font-bold bg-gradient-to-r from-gray-900 via-red-700 to-gray-900 bg-clip-text text-transparent"
-            animate={{
-              backgroundPosition: ['0%', '100%', '0%']
-            }}
-            transition={{
-              duration: 5,
-              repeat: Infinity,
-              ease: "linear"
-            }}
           >
             Home
           </motion.h1>
           <motion.img 
             src={logo} 
             alt="Spiritual Talk Foundation Logo" 
-            className="h-12 w-12 object-contain rounded-full shadow-lg"
+            className="h-12 w-12 object-contain rounded-full shadow-lg cursor-pointer"
+            onClick={onLogoClick}
             whileHover={{ rotate: 360, scale: 1.1 }}
+            whileTap={{ scale: 0.95 }}
             transition={{ duration: 0.6 }}
           />
         </div>
         
-        {/* Search Bar - Mobile */}
         <div className="px-4 pb-4">
           <SearchBar
             value={searchQuery}
@@ -225,10 +213,8 @@ const HomePage = ({ onCourseClick }) => {
         </div>
       </motion.div>
 
-      {/* Desktop Header with Hero Section */}
       <div className="hidden lg:block bg-white/80 backdrop-blur-xl border-b border-gray-200/50 sticky top-0 z-20 shadow-sm">
         <div className="relative px-8 py-12 overflow-hidden">
-          {/* Animated background elements */}
           <motion.div
             className="absolute top-0 right-0 w-96 h-96 bg-gradient-to-br from-red-100/40 to-rose-100/40 rounded-full blur-3xl"
             animate={{
@@ -241,22 +227,8 @@ const HomePage = ({ onCourseClick }) => {
               ease: "easeInOut"
             }}
           />
-          <motion.div
-            className="absolute bottom-0 left-0 w-96 h-96 bg-gradient-to-tr from-purple-100/40 to-pink-100/40 rounded-full blur-3xl"
-            animate={{
-              scale: [1.2, 1, 1.2],
-              opacity: [0.3, 0.5, 0.3]
-            }}
-            transition={{
-              duration: 8,
-              repeat: Infinity,
-              ease: "easeInOut",
-              delay: 1
-            }}
-          />
           
           <div className="relative z-10">
-            {/* Animated badge */}
             <motion.div
               className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-red-50 to-rose-50 border border-red-200/50 rounded-full mb-6"
               initial={{ opacity: 0, y: 20 }}
@@ -282,7 +254,6 @@ const HomePage = ({ onCourseClick }) => {
               </span>
             </motion.div>
 
-            {/* Main heading */}
             <motion.h1 
               className="text-5xl font-black mb-4 leading-tight"
               initial={{ opacity: 0, y: 30 }}
@@ -293,23 +264,11 @@ const HomePage = ({ onCourseClick }) => {
                 Discover Your Next
               </span>
               <br />
-              <motion.span 
-                className="bg-gradient-to-r from-red-600 via-rose-500 to-red-600 bg-clip-text text-transparent"
-                animate={{
-                  backgroundPosition: ['0%', '100%', '0%']
-                }}
-                transition={{
-                  duration: 5,
-                  repeat: Infinity,
-                  ease: "linear"
-                }}
-                style={{ backgroundSize: '200%' }}
-              >
+              <span className="bg-gradient-to-r from-red-600 via-rose-500 to-red-600 bg-clip-text text-transparent">
                 Learning Adventure ✨
-              </motion.span>
+              </span>
             </motion.h1>
 
-            {/* Subheading */}
             <motion.p 
               className="text-gray-600 text-lg max-w-2xl mb-6 leading-relaxed"
               initial={{ opacity: 0, y: 20 }}
@@ -319,7 +278,6 @@ const HomePage = ({ onCourseClick }) => {
               Explore our curated collection of premium courses designed to transform your skills and elevate your knowledge. Start your journey today!
             </motion.p>
 
-            {/* Search Bar - Desktop */}
             <motion.div
               className="max-w-2xl"
               initial={{ opacity: 0, y: 20 }}
@@ -337,7 +295,6 @@ const HomePage = ({ onCourseClick }) => {
         </div>
       </div>
 
-      {/* Course Cards Section */}
       <div className="flex-1 px-6 lg:px-8 py-0 lg:py-2 pb-24 lg:pb-6">
         {availableCourses.length === 0 ? (
           <motion.div 
@@ -381,7 +338,6 @@ const HomePage = ({ onCourseClick }) => {
           </motion.div>
         ) : (
           <>
-            {/* Section title for mobile */}
             <motion.div
               className="lg:hidden mb-6 flex items-center justify-between"
               initial={{ opacity: 0, x: -20 }}
@@ -398,7 +354,6 @@ const HomePage = ({ onCourseClick }) => {
               )}
             </motion.div>
 
-            {/* Results count for desktop */}
             {searchQuery && (
               <motion.div
                 className="hidden lg:block mb-6"
@@ -450,6 +405,7 @@ const HomePage = ({ onCourseClick }) => {
                     chapters={course.chapters || 0}
                     isPurchased={false}
                     price={course.price}
+                    validityMonths={parseInt(course.courseValidity || 1)}
                     showStatus={false}
                     onCourseClick={handleCardClick}
                     onBuyClick={handleCoursePurchase}
@@ -460,31 +416,6 @@ const HomePage = ({ onCourseClick }) => {
           </>
         )}
       </div>
-
-      {/* Floating scroll indicator (desktop only) */}
-      <motion.div
-        className="hidden lg:block fixed bottom-8 right-8 z-30"
-        initial={{ opacity: 0, scale: 0 }}
-        animate={{ opacity: 1, scale: 1 }}
-        transition={{ delay: 1, type: "spring" }}
-      >
-        <motion.button
-          className="w-14 h-14 bg-gradient-to-br from-red-600 to-rose-600 rounded-full shadow-2xl flex items-center justify-center text-white"
-          whileHover={{ scale: 1.1, boxShadow: "0 20px 40px rgba(220, 38, 38, 0.4)" }}
-          whileTap={{ scale: 0.95 }}
-          animate={{
-            y: [0, -10, 0],
-          }}
-          transition={{
-            duration: 2,
-            repeat: Infinity,
-            ease: "easeInOut"
-          }}
-          onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
-        >
-          <span className="text-2xl">↑</span>
-        </motion.button>
-      </motion.div>
     </div>
   );
 };

@@ -13,7 +13,6 @@ const LiveSessionPage = lazy(() => import('./pages/LiveSessionPage'));
 const BottomNav = lazy(() => import('./components/BottomNav'));
 const SidebarNav = lazy(() => import('./components/SidebarNav'));
 
-
 const LoadingSpinner = () => (
   <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-100 flex items-center justify-center">
     <div className="text-center">
@@ -23,9 +22,8 @@ const LoadingSpinner = () => (
   </div>
 );
 
-
 function AppContent() {
-  const { isAuthenticated, isLoading, authInitialized, user } = useAuth();
+  const { isAuthenticated, isLoading, authInitialized } = useAuth();
   const [activeNavTab, setActiveNavTab] = useState('home');
   const [selectedCourseId, setSelectedCourseId] = useState(null);
   const [viewMode, setViewMode] = useState(null); 
@@ -34,7 +32,6 @@ function AppContent() {
     initConsoleCleanup();
   }, []);
 
-
   const handleTabChange = React.useCallback((tab) => {
     console.log('Tab changed to:', tab);
     setActiveNavTab(tab);
@@ -42,48 +39,49 @@ function AppContent() {
     setViewMode(null);
   }, []);
 
-  // FIXED: Handle course click from HomePage (unpurchased courses)
+  const handleLogoClick = React.useCallback(() => {
+    console.log('🏠 Logo clicked - navigating to home');
+    setActiveNavTab('home');
+    setSelectedCourseId(null);
+    setViewMode(null);
+  }, []);
+
   const handleHomePageCourseClick = React.useCallback((courseId) => {
     console.log('Home page course clicked:', courseId);
     setSelectedCourseId(courseId);
-    setViewMode('buy'); // Show BuyCourseDetailPage
+    setViewMode('buy');
   }, []);
 
-  // FIXED: Handle course click from MyCoursePage (purchased courses)
   const handleMyCourseCourseClick = React.useCallback((courseId) => {
     console.log('My course clicked:', courseId);
     setSelectedCourseId(courseId);
-    setViewMode('mycourse'); // Show MyCourseDetailsPage
+    setViewMode('mycourse');
   }, []);
 
-  // Handle purchase completion
   const handlePurchaseComplete = React.useCallback((courseId) => {
     console.log('Purchase completed for course:', courseId);
     toast.success('🎉 Course purchased successfully! Check "My Courses"');
     
-    // Clear selected course and go back to home
     setSelectedCourseId(null);
     setViewMode(null);
     
-    // Force page reload to refresh user data and course lists
     setTimeout(() => {
       window.location.reload();
     }, 1500);
   }, []);
 
-  // Handle back navigation
   const handleBackNavigation = React.useCallback(() => {
     console.log('Back navigation triggered');
     setSelectedCourseId(null);
     setViewMode(null);
   }, []);
 
-  // OPTIMIZATION: Show minimal loading during auth initialization only
-  if (isLoading && !authInitialized) {
-    return <LoadingSpinner />;
+  // ✅ FIX: Wait for auth to initialize before showing anything
+  // This prevents the flash of login page on refresh
+  if (!authInitialized) {
+    return null; // Return nothing while checking auth status
   }
 
-  // Show auth page if not authenticated
   if (!isAuthenticated) {
     return (
       <Suspense fallback={<LoadingSpinner />}>
@@ -92,16 +90,12 @@ function AppContent() {
     );
   }
 
-  // Check if we're viewing a purchased course (MyCourseDetailsPage)
   const isViewingPurchasedCourse = selectedCourseId && viewMode === 'mycourse';
-
-  // Check if we're viewing an unpurchased course detail (BuyCourseDetailPage)
   const isViewingCourseDetail = selectedCourseId && viewMode === 'buy';
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-100">
       <Suspense fallback={<LoadingSpinner />}>
-        {/* FIXED: Full-screen course player for purchased courses */}
         {isViewingPurchasedCourse ? (
           <div className="fixed inset-0 z-50 bg-gray-900">
             <MyCourseDetailsPage
@@ -111,12 +105,12 @@ function AppContent() {
           </div>
         ) : (
           <>
-            {/* Sidebar Navigation (Desktop) */}
-            <SidebarNav activeTab={activeNavTab} onTabChange={handleTabChange} />
+            <SidebarNav 
+              activeTab={activeNavTab} 
+              onTabChange={handleTabChange}
+            />
             
-            {/* Main Content Area */}
             <div className="lg:ml-72 transition-all duration-300">
-              {/* FIXED: Show course detail page when viewing unpurchased course */}
               {isViewingCourseDetail ? (
                 <BuyCourseDetailPage
                   courseId={selectedCourseId}
@@ -125,30 +119,35 @@ function AppContent() {
                 />
               ) : (
                 <>
-                  {/* Home Tab - Shows unpurchased courses */}
                   {activeNavTab === 'home' && (
-                    <HomePage onCourseClick={handleHomePageCourseClick} />
+                    <HomePage 
+                      onCourseClick={handleHomePageCourseClick}
+                      onLogoClick={handleLogoClick}
+                    />
                   )}
                   
-                  {/* My Course Tab - Shows purchased courses */}
                   {activeNavTab === 'mycourse' && (
-                    <MyCoursePage onCourseClick={handleMyCourseCourseClick} />
+                    <MyCoursePage 
+                      onCourseClick={handleMyCourseCourseClick}
+                      onLogoClick={handleLogoClick}
+                    />
                   )}
                   
-                  {/* Live Session Tab */}
                   {activeNavTab === 'livesession' && (
-                    <LiveSessionPage />
+                    <LiveSessionPage 
+                      onLogoClick={handleLogoClick}
+                    />
                   )}
                   
-                  {/* Profile Tab */}
                   {activeNavTab === 'profile' && (
-                    <ProfilePage />
+                    <ProfilePage 
+                      onLogoClick={handleLogoClick}
+                    />
                   )}
                 </>
               )}
             </div>
 
-            {/* Bottom Navigation (Mobile) */}
             <BottomNav activeTab={activeNavTab} onTabChange={handleTabChange} />
           </>
         )}
@@ -157,45 +156,77 @@ function AppContent() {
   );
 }
 
-
 function App() {
   return (
     <AuthProvider>
-      {/* Toast notifications */}
+      {/* ✅ FIXED: Enhanced Toaster Configuration with Higher Z-Index */}
       <Toaster
         position="top-center"
         reverseOrder={false}
-        gutter={8}
+        gutter={12}
+        containerClassName="toast-container"
         containerStyle={{
-          top: 20,
+          top: '80px',
+          zIndex: 99999,
         }}
         toastOptions={{
-          duration: 3000,
+          duration: 4000,
+          className: 'toast-notification',
           style: {
-            background: '#fff',
-            color: '#363636',
-            padding: '12px 16px',
-            borderRadius: '8px',
-            boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
-            fontSize: '14px',
+            background: '#ffffff',
+            color: '#1f2937',
+            padding: '16px 20px',
+            borderRadius: '12px',
+            boxShadow: '0 10px 40px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(0, 0, 0, 0.05)',
+            fontSize: '15px',
             fontWeight: '500',
+            maxWidth: '500px',
+            minWidth: '320px',
+            backdropFilter: 'blur(10px)',
           },
           success: {
-            duration: 2500,
+            duration: 3500,
             iconTheme: {
               primary: '#10b981',
-              secondary: '#fff',
+              secondary: '#ffffff',
+            },
+            style: {
+              background: 'linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%)',
+              color: '#065f46',
+              border: '2px solid #10b981',
             },
           },
           error: {
-            duration: 4000,
+            duration: 5000,
             iconTheme: {
               primary: '#ef4444',
-              secondary: '#fff',
+              secondary: '#ffffff',
+            },
+            style: {
+              background: 'linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%)',
+              color: '#991b1b',
+              border: '2px solid #ef4444',
             },
           },
           loading: {
             duration: Infinity,
+            iconTheme: {
+              primary: '#3b82f6',
+              secondary: '#ffffff',
+            },
+            style: {
+              background: 'linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%)',
+              color: '#1e40af',
+              border: '2px solid #3b82f6',
+            },
+          },
+          blank: {
+            duration: 4000,
+            style: {
+              background: 'linear-gradient(135deg, #fefce8 0%, #fef3c7 100%)',
+              color: '#854d0e',
+              border: '2px solid #eab308',
+            },
           },
         }}
       />

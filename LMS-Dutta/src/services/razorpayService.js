@@ -1,8 +1,7 @@
-// src/services/razorpayService.js - FIXED VERSION
+// src/services/razorpayService.js - WITH VALIDITY MONTHS
 import { getRazorpayKeyId, COMPANY_INFO, PAYMENT_CONFIG } from '../config/razorpayConfig';
 import toast from 'react-hot-toast';
 
-// ✅ YOUR CLOUD FUNCTION URL
 const CLOUD_FUNCTION_URL = "https://verifypayment-7a4qi5ahaa-uc.a.run.app";
 
 const loadRazorpayScript = () => {
@@ -27,11 +26,13 @@ const loadRazorpayScript = () => {
   });
 };
 
+/**
+ * ✅ UPDATED: Initiate payment with validity months support
+ */
 export const initiatePayment = async (courseData, userInfo, onPaymentSuccess = null) => {
   try {
     console.log('💳 Initiating payment...');
 
-    // Validate
     if (!courseData || !courseData.price) {
       toast.error('Invalid course data');
       return { success: false, error: 'Invalid course data' };
@@ -42,7 +43,6 @@ export const initiatePayment = async (courseData, userInfo, onPaymentSuccess = n
       return { success: false, error: 'User not logged in' };
     }
 
-    // Load Razorpay
     const isLoaded = await loadRazorpayScript();
     if (!isLoaded) {
       toast.error('Failed to load payment gateway');
@@ -54,20 +54,25 @@ export const initiatePayment = async (courseData, userInfo, onPaymentSuccess = n
       return { success: false, error: 'Razorpay not available' };
     }
 
-    // Get key
     const razorpayKey = getRazorpayKeyId();
     if (!razorpayKey) {
       toast.error('Payment gateway not configured');
       return { success: false, error: 'Payment gateway not configured' };
     }
 
-    // Payment details
-    const amount = Math.round(courseData.price * 100); // Paise
+    const amount = Math.round(courseData.price * 100);
     const currency = PAYMENT_CONFIG.currency;
 
-    console.log('💰 Payment amount:', amount / 100, currency);
+    // ✅ CRITICAL: Get validity months from course
+    const validityMonths = parseInt(courseData.courseValidity || courseData.validityMonths || 1);
+    
+    console.log('💰 Payment details:', {
+      amount: amount / 100,
+      currency,
+      validityMonths,
+      courseId: courseData.id
+    });
 
-    // Razorpay options
     const options = {
       key: razorpayKey,
       amount: amount,
@@ -86,45 +91,35 @@ export const initiatePayment = async (courseData, userInfo, onPaymentSuccess = n
         course_id: courseData.id,
         course_title: courseData.title,
         user_id: userInfo.uid,
+        validity_months: validityMonths, // ✅ Send validity to backend
       },
       
       theme: {
         color: PAYMENT_CONFIG.theme.color,
       },
       
-      // ✅ FIXED: Payment success handler with proper undefined handling
       handler: async function (response) {
         console.log('✅ Payment response received:', response);
-        
-        // Log what Razorpay returned
-        console.log('🔍 Razorpay response fields:', {
-          payment_id: response.razorpay_payment_id,
-          order_id: response.razorpay_order_id || 'N/A',
-          signature: response.razorpay_signature || 'N/A'
-        });
         
         const loadingToast = toast.loading('Verifying payment...');
         
         try {
           console.log('🔐 Calling backend verification...');
           
-          // ✅ CRITICAL FIX: Only send defined values
+          // ✅ CRITICAL: Include validityMonths in payment verification
           const paymentPayload = {
-            // Required fields
             razorpay_payment_id: response.razorpay_payment_id,
             courseId: courseData.id,
             userId: userInfo.uid,
             
-            // Optional fields - only include if they exist
             ...(response.razorpay_order_id && { razorpay_order_id: response.razorpay_order_id }),
             ...(response.razorpay_signature && { razorpay_signature: response.razorpay_signature }),
             
-            // Course details
             courseTitle: courseData.title || courseData.courseTitle || 'Course',
             amount: courseData.price || 0,
             currency: currency,
+            validityMonths: validityMonths, // ✅ Send to backend
             
-            // User details
             userEmail: userInfo.email || '',
             userName: userInfo.name || '',
           };
@@ -153,13 +148,11 @@ export const initiatePayment = async (courseData, userInfo, onPaymentSuccess = n
             
             console.log('✅ Payment verification successful!');
             
-            // Call success callback
             if (onPaymentSuccess) {
               console.log('✅ Calling success callback');
               onPaymentSuccess(userInfo);
             }
             
-            // Reload after 2 seconds
             setTimeout(() => {
               console.log('🔄 Reloading page...');
               window.location.reload();
@@ -212,12 +205,8 @@ export const initiatePayment = async (courseData, userInfo, onPaymentSuccess = n
   }
 };
 
-/**
- * Verify if user has purchased a course
- */
 export const verifyCoursePurchase = async (userId, courseId) => {
   try {
-    // This would need to be implemented with your backend
     console.log('Verifying purchase for:', userId, courseId);
     return false;
   } catch (error) {
@@ -226,9 +215,6 @@ export const verifyCoursePurchase = async (userId, courseId) => {
   }
 };
 
-/**
- * Get user's transaction history
- */
 export const getUserTransactions = async (userId) => {
   try {
     const url = `https://us-central1-stf-web-34a3b.cloudfunctions.net/getUserTransactions?userId=${userId}`;

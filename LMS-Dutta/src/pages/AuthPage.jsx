@@ -1,13 +1,17 @@
+// AuthPage.jsx - Updated with Custom Toast Utility
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Person, Email, Lock, Visibility, VisibilityOff } from '@mui/icons-material';
 import { useAuth } from '../context/AuthContext';
-import toast, { Toaster } from 'react-hot-toast';
-import logo from '../assets/logo.png';
+import ForgotPasswordModal from '../components/ForgotPasswordModal';
+// ✅ Import custom toast utility instead of react-hot-toast
+import { showSuccess, showError, showLoading, dismissToast, authToasts } from '../utils/toast';
+import logo1 from '../assets/logo1.png';
 
 const AuthPage = () => {
   const [isLogin, setIsLogin] = useState(true);
   const [showPassword, setShowPassword] = useState(false);
+  const [showForgotPassword, setShowForgotPassword] = useState(false);
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -25,7 +29,6 @@ const AuthPage = () => {
       ...prev,
       [name]: value
     }));
-    // Clear error for this field
     if (errors[name]) {
       setErrors(prev => ({
         ...prev,
@@ -65,7 +68,8 @@ const AuthPage = () => {
     e.preventDefault();
     
     if (!validateForm()) {
-      toast.error('Please fix the errors in the form');
+      // ✅ Use custom error toast
+      showError('Please fix the errors in the form', { duration: 3000 });
       return;
     }
 
@@ -73,33 +77,63 @@ const AuthPage = () => {
 
     try {
       let result;
+      let loadingToastId;
+
       if (isLogin) {
         console.log('Attempting login...');
+        // ✅ Show loading toast
+        loadingToastId = showLoading('Logging in...');
+        
         result = await login(formData.email.trim(), formData.password);
+        
+        // ✅ Dismiss loading toast
+        dismissToast(loadingToastId);
       } else {
         console.log('Attempting signup...');
+        // ✅ Show loading toast
+        loadingToastId = showLoading('Creating account...');
+        
         result = await signup(formData.name.trim(), formData.email.trim(), formData.password);
+        
+        // ✅ Dismiss loading toast
+        dismissToast(loadingToastId);
       }
 
       console.log('Auth result:', result);
 
       if (result && result.success) {
-        toast.success(isLogin ? 'Login successful!' : 'Account created successfully!');
-        // Reset form
         setFormData({
           name: '',
           email: '',
           password: '',
           confirmPassword: ''
         });
+        
+        // ✅ Use custom success toast with shorter duration
+        if (isLogin) {
+          authToasts.loginSuccess();
+        } else {
+          authToasts.signupSuccess();
+        }
+        
+        // Component will automatically unmount when user becomes authenticated
       } else {
         const errorMessage = result?.error || 'An error occurred. Please try again.';
         console.error('Auth failed:', errorMessage);
-        toast.error(errorMessage);
+        
+        // ✅ Use custom error toast
+        if (isLogin) {
+          authToasts.loginError(errorMessage);
+        } else {
+          authToasts.signupError(errorMessage);
+        }
       }
     } catch (error) {
       console.error('Auth exception:', error);
-      toast.error('An unexpected error occurred. Please try again.');
+      // ✅ Use custom error toast
+      showError('An unexpected error occurred. Please try again.', {
+        duration: 4000,
+      });
     } finally {
       setIsLoading(false);
     }
@@ -118,44 +152,11 @@ const AuthPage = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-red-50 via-white to-rose-50 flex items-center justify-center px-4 py-8">
-      {/* Toast Container */}
-      <Toaster
-        position="top-center"
-        reverseOrder={false}
-        gutter={8}
-        toastOptions={{
-          duration: 4000,
-          style: {
-            background: '#fff',
-            color: '#363636',
-            padding: '16px',
-            borderRadius: '8px',
-            boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
-          },
-          success: {
-            duration: 3000,
-            iconTheme: {
-              primary: '#10b981',
-              secondary: '#fff',
-            },
-            style: {
-              border: '2px solid #10b981',
-            },
-          },
-          error: {
-            duration: 5000,
-            iconTheme: {
-              primary: '#ef4444',
-              secondary: '#fff',
-            },
-            style: {
-              border: '2px solid #ef4444',
-            },
-          },
-        }}
+      <ForgotPasswordModal
+        isOpen={showForgotPassword}
+        onClose={() => setShowForgotPassword(false)}
       />
 
-      {/* Animated background elements */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
         <motion.div
           className="absolute top-0 right-0 w-96 h-96 bg-gradient-to-br from-red-200/30 to-rose-200/30 rounded-full blur-3xl"
@@ -190,17 +191,17 @@ const AuthPage = () => {
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5 }}
       >
-        {/* Logo and Header */}
         <div className="text-center mb-8">
           <motion.div
             className="inline-block mb-4"
+            animate={{ rotate: 0, scale: 1 }} 
             whileHover={{ scale: 1.05, rotate: [0, -5, 5, 0] }}
             transition={{ duration: 0.5 }}
           >
             <div className="relative">
               <div className="absolute inset-0 bg-gradient-to-br from-red-600 via-rose-600 to-red-700 rounded-2xl blur-lg opacity-30" />
               <img 
-                src={logo} 
+                src={logo1} 
                 alt="Logo" 
                 className="relative h-16 w-16 object-contain rounded-2xl shadow-lg"
               />
@@ -214,13 +215,11 @@ const AuthPage = () => {
           </p>
         </div>
 
-        {/* Auth Form Card */}
         <motion.div
           className="bg-white/95 backdrop-blur-sm rounded-2xl shadow-2xl p-8"
           layout
         >
           <form onSubmit={handleSubmit} className="space-y-5">
-            {/* Name Field (Signup Only) */}
             <AnimatePresence mode="wait">
               {!isLogin && (
                 <motion.div
@@ -254,7 +253,6 @@ const AuthPage = () => {
               )}
             </AnimatePresence>
 
-            {/* Email Field */}
             <div>
               <label className="block text-sm font-semibold text-gray-700 mb-2">
                 Email Address
@@ -279,7 +277,6 @@ const AuthPage = () => {
               )}
             </div>
 
-            {/* Password Field */}
             <div>
               <label className="block text-sm font-semibold text-gray-700 mb-2">
                 Password
@@ -315,7 +312,18 @@ const AuthPage = () => {
               )}
             </div>
 
-            {/* Confirm Password Field (Signup Only) */}
+            {isLogin && (
+              <div className="flex justify-end">
+                <button
+                  type="button"
+                  onClick={() => setShowForgotPassword(true)}
+                  className="text-sm text-red-600 font-semibold hover:text-red-700 transition-colors"
+                >
+                  Forgot Password?
+                </button>
+              </div>
+            )}
+
             <AnimatePresence mode="wait">
               {!isLogin && (
                 <motion.div
@@ -349,7 +357,6 @@ const AuthPage = () => {
               )}
             </AnimatePresence>
 
-            {/* Submit Button */}
             <motion.button
               type="submit"
               disabled={isLoading}
@@ -368,7 +375,6 @@ const AuthPage = () => {
             </motion.button>
           </form>
 
-          {/* Toggle between Login and Signup */}
           <div className="mt-6 text-center">
             <p className="text-gray-600">
               {isLogin ? "Don't have an account? " : "Already have an account? "}
@@ -383,7 +389,6 @@ const AuthPage = () => {
           </div>
         </motion.div>
 
-        {/* Footer */}
         <p className="text-center text-gray-500 text-sm mt-6">
           By continuing, you agree to our Terms of Service and Privacy Policy
         </p>

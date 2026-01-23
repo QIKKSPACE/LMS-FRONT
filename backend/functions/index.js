@@ -1,4 +1,3 @@
-// functions/index.js - FIXED VERSION (Handles undefined values)
 const functions = require("firebase-functions");
 const admin = require("firebase-admin");
 const crypto = require("crypto");
@@ -9,13 +8,12 @@ admin.initializeApp();
 const db = admin.firestore();
 
 /**
- * ✅ CLOUD FUNCTION: Verify Razorpay Payment
- * FIXED: Properly handles undefined/null values for Firestore
+ * CLOUD FUNCTION: Verify Razorpay Payment
  */
 exports.verifyPayment = functions.https.onRequest((req, res) => {
   return cors(req, res, async () => {
     try {
-      console.log("🔐 Payment verification request received");
+      console.log(" Payment verification request received");
 
       // Only allow POST requests
       if (req.method !== "POST") {
@@ -50,7 +48,7 @@ exports.verifyPayment = functions.https.onRequest((req, res) => {
 
       // Validate required fields
       if (!razorpay_payment_id || !courseId || !userId) {
-        console.error("❌ Missing required fields:", {
+        console.error(" Missing required fields:", {
           has_payment_id: !!razorpay_payment_id,
           has_courseId: !!courseId,
           has_userId: !!userId
@@ -61,19 +59,16 @@ exports.verifyPayment = functions.https.onRequest((req, res) => {
         });
       }
 
-      // ============================================
-      // STEP 1: VERIFY RAZORPAY PAYMENT (IF SIGNATURE EXISTS)
-      // ============================================
-      console.log("🔍 Verifying Razorpay payment...");
+      console.log("Verifying Razorpay payment...");
 
       // Check if signature exists (for order-based payments)
       if (razorpay_signature && razorpay_order_id) {
-        console.log("🔐 Verifying payment signature (order-based payment)...");
+        console.log(" Verifying payment signature (order-based payment)...");
         
         const razorpaySecret = functions.config().razorpay.key_secret;
 
         if (!razorpaySecret) {
-          console.error("❌ Razorpay secret not configured");
+          console.error(" Razorpay secret not configured");
           return res.status(500).json({
             success: false,
             error: "Payment gateway not configured",
@@ -87,17 +82,17 @@ exports.verifyPayment = functions.https.onRequest((req, res) => {
           .digest("hex");
 
         if (razorpay_signature !== expectedSignature) {
-          console.error("❌ Invalid payment signature - possible fraud!");
+          console.error(" Invalid payment signature - possible fraud!");
           return res.status(400).json({
             success: false,
             error: "Payment verification failed. Invalid signature.",
           });
         }
 
-        console.log("✅ Payment signature verified successfully");
+        console.log(" Payment signature verified successfully");
       } else {
         console.log("ℹ️ Direct payment (no order). Payment ID:", razorpay_payment_id);
-        console.log("⚠️ Signature verification skipped - Direct payment");
+        console.log(" Signature verification skipped - Direct payment");
       }
 
       // ============================================
@@ -107,7 +102,7 @@ exports.verifyPayment = functions.https.onRequest((req, res) => {
       const userDoc = await userRef.get();
 
       if (!userDoc.exists) {
-        console.error("❌ User not found:", userId);
+        console.error(" User not found:", userId);
         return res.status(404).json({
           success: false,
           error: "User not found",
@@ -118,7 +113,7 @@ exports.verifyPayment = functions.https.onRequest((req, res) => {
       const currentPurchasedCourses = userData.purchasedCourses || [];
 
       if (currentPurchasedCourses.includes(courseId)) {
-        console.log("⚠️ Course already purchased");
+        console.log("Course already purchased");
         return res.status(200).json({
           success: true,
           alreadyPurchased: true,
@@ -145,7 +140,7 @@ exports.verifyPayment = functions.https.onRequest((req, res) => {
       }
 
       if (!courseDoc.exists) {
-        console.error("❌ Course not found:", courseId);
+        console.error("Course not found:", courseId);
         return res.status(404).json({
           success: false,
           error: "Course not found",
@@ -153,7 +148,7 @@ exports.verifyPayment = functions.https.onRequest((req, res) => {
       }
 
       const courseData = courseDoc.data();
-      console.log("✅ Course found:", courseData.courseTitle, "| Source:", courseSource);
+      console.log(" Course found:", courseData.courseTitle, "| Source:", courseSource);
 
       // Calculate expiry date
       const now = new Date();
@@ -166,9 +161,6 @@ exports.verifyPayment = functions.https.onRequest((req, res) => {
         expiryDate: expiryDate.toISOString(),
       });
 
-      // ============================================
-      // STEP 4: ENROLL USER IN COURSE
-      // ============================================
       console.log("📝 Enrolling user in course...");
 
       const timestamp = new Date().toISOString();
@@ -178,12 +170,9 @@ exports.verifyPayment = functions.https.onRequest((req, res) => {
         updatedAt: timestamp,
       });
 
-      console.log("✅ Course added to user's purchases");
+      console.log(" Course added to user's purchases");
 
-      // ============================================
-      // STEP 5: INITIALIZE COURSE PROGRESS
-      // ============================================
-      console.log("📊 Initializing course progress...");
+      console.log(" Initializing course progress...");
 
       let totalLectures = 0;
       if (courseData.courseContent && Array.isArray(courseData.courseContent)) {
@@ -213,22 +202,19 @@ exports.verifyPayment = functions.https.onRequest((req, res) => {
         createdAt: timestamp,
       });
 
-      console.log("✅ Course progress initialized");
+      console.log(" Course progress initialized");
 
-      // ============================================
-      // STEP 6: SAVE TRANSACTION RECORD
-      // ============================================
       console.log("💾 Saving transaction record...");
 
       const transactionId = `txn_${Date.now()}_${userId.substring(0, 8)}`;
       const transactionRef = db.collection("transactions").doc(transactionId);
 
-      // ✅ CRITICAL FIX: Create transaction data WITHOUT undefined values
+      //  CRITICAL FIX: Create transaction data WITHOUT undefined values
       const transactionData = {
         transactionId: transactionId,
         razorpayPaymentId: razorpay_payment_id,
-        razorpayOrderId: razorpay_order_id || "",  // ✅ Use empty string instead of undefined
-        razorpaySignature: razorpay_signature || "",  // ✅ Use empty string instead of undefined
+        razorpayOrderId: razorpay_order_id || "",  //  Use empty string instead of undefined
+        razorpaySignature: razorpay_signature || "",  //  Use empty string instead of undefined
         courseId: courseId,
         courseTitle: courseTitle || courseData.courseTitle || "Course",
         amount: amount || 0,
@@ -246,15 +232,12 @@ exports.verifyPayment = functions.https.onRequest((req, res) => {
         expiryDate: expiryDate.toISOString(),
       };
 
-      console.log("💾 Transaction data prepared (no undefined values)");
+      console.log(" Transaction data prepared (no undefined values)");
 
       await transactionRef.set(transactionData);
 
-      console.log("✅ Transaction saved:", transactionId);
+      console.log(" Transaction saved:", transactionId);
 
-      // ============================================
-      // STEP 7: RETURN SUCCESS RESPONSE
-      // ============================================
       console.log("🎉 Payment verification complete!");
 
       return res.status(200).json({
@@ -269,7 +252,7 @@ exports.verifyPayment = functions.https.onRequest((req, res) => {
       });
 
     } catch (error) {
-      console.error("❌ Error verifying payment:", error);
+      console.error(" Error verifying payment:", error);
       console.error("Error details:", error.message);
       console.error("Error stack:", error.stack);
       
@@ -282,9 +265,7 @@ exports.verifyPayment = functions.https.onRequest((req, res) => {
   });
 });
 
-/**
- * ✅ HELPER FUNCTION: Get User Transaction History
- */
+
 exports.getUserTransactions = functions.https.onRequest((req, res) => {
   return cors(req, res, async () => {
     try {
@@ -321,7 +302,7 @@ exports.getUserTransactions = functions.https.onRequest((req, res) => {
         });
       });
 
-      console.log("✅ Found", transactions.length, "transactions");
+      console.log("Found", transactions.length, "transactions");
 
       return res.status(200).json({
         success: true,
@@ -329,7 +310,7 @@ exports.getUserTransactions = functions.https.onRequest((req, res) => {
       });
 
     } catch (error) {
-      console.error("❌ Error fetching transactions:", error);
+      console.error(" Error fetching transactions:", error);
       return res.status(500).json({
         success: false,
         error: error.message,

@@ -4,7 +4,7 @@ import { useAuth } from '../context/AuthContext';
 // Switch to email OTP for more reliable verification
 import { sendEmailOTP, verifyEmailOTP, cleanupEmailOTP } from '../services/emailOTPService';
 import toast from 'react-hot-toast';
-import logo from '../assets/logo.png';
+import logo1 from '../assets/logo1.png';
 
 const ProfilePage = () => {
   const { user, updateProfile } = useAuth();
@@ -386,7 +386,7 @@ const ProfilePage = () => {
             <div className="flex flex-col items-center mb-8">
               <div className="w-24 h-24 bg-white rounded-full flex items-center justify-center mb-4 shadow-lg border-4 border-red-500 p-2">
                 <img 
-                  src={logo} 
+                  src={logo1} 
                   alt="Logo" 
                   className="w-full h-full object-contain rounded-full"
                 />

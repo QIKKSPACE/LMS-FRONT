@@ -5,8 +5,6 @@ import FilterTabs from '../components/FilterTabs';
 import SearchBar from '../components/SearchBar';
 import { getUserCourses } from '../services/courseService';
 import { useAuth } from '../context/AuthContext';
-import { checkCourseExpiry } from '../utils/courseExpiry';
-import { fixBrokenProgressDocuments, checkIfMigrationNeeded } from '../utils/migrationFix';
 import toast from 'react-hot-toast';
 import logo from '../assets/logo.png';
 
@@ -18,14 +16,14 @@ const MyCoursePage = ({ onCourseClick }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const { user } = useAuth();
 
-  // ✅ THREE TABS: All, Completed, Expired
+  // ✅ THREE TABS: All (Active), Completed, Expired
   const filterTabs = [
     { id: 'all', label: 'All' },
     { id: 'completed', label: 'Completed' },
     { id: 'expired', label: 'Expired' },
   ];
 
-  // Fetch user's purchased courses from Firestore
+  // Fetch user's purchased courses
   useEffect(() => {
     const fetchUserCourses = async () => {
       if (!user || !user.uid) {
@@ -39,72 +37,55 @@ const MyCoursePage = ({ onCourseClick }) => {
       try {
         console.log('📚 Fetching purchased courses for user:', user.uid);
         
-        // ✅ Check if migration is needed
-        const needsMigration = await checkIfMigrationNeeded(user.uid);
-        
-        if (needsMigration) {
-          console.log('🔧 Migration needed! Fixing broken progress documents...');
-          toast.loading('Fixing course progress data...', { id: 'migration' });
-          
-          const migrationResult = await fixBrokenProgressDocuments(user.uid);
-          
-          if (migrationResult.success) {
-            toast.success(`✅ Fixed ${migrationResult.fixed} course(s)`, { id: 'migration' });
-            console.log('✅ Migration complete:', migrationResult);
-          } else {
-            toast.error('Migration had some errors', { id: 'migration' });
-            console.error('❌ Migration errors:', migrationResult);
-          }
-        }
-        
         const result = await getUserCourses(user.uid);
 
         if (result.success) {
-          // ✅ FIXED: Properly determine status for each course
+          // ✅ Process courses with correct status
           const coursesWithStatus = result.courses.map(course => {
-            // First check expiry
-            const courseWithExpiry = checkCourseExpiry(course);
+            console.log(`📊 Course: ${course.courseTitle}`);
+            console.log(`   - Progress: ${course.progress}%`);
+            console.log(`   - Enrolled Status: ${course.enrolledStatus}`);
+            console.log(`   - Is Expired: ${course.isExpired}`);
+            console.log(`   - Expiry Date: ${course.expiryDate}`);
             
-            // Then determine status based on progress
-            let finalStatus = courseWithExpiry.status;
-            const progress = course.progress || 0;
+            let finalStatus;
             
-            console.log(`📊 Course: ${course.courseTitle}, Progress: ${progress}%, Expired: ${courseWithExpiry.isExpired}`);
-            
-            if (courseWithExpiry.isExpired) {
+            //  PRIORITY 1: Check if expired (from EnrolledCourses.enrolledStatus)
+            if (course.isExpired || course.enrolledStatus === 'expired') {
               finalStatus = 'EXPIRED';
-              console.log(`❌ ${course.courseTitle} is EXPIRED`);
-            } else if (progress === 100) {
+              console.log(`   → Status: EXPIRED (enrolledStatus: ${course.enrolledStatus})`);
+            }
+            //  PRIORITY 2: Check if completed (100% progress)
+            else if (course.progress === 100) {
               finalStatus = 'COMPLETED';
-              console.log(`✅ ${course.courseTitle} is COMPLETED (100%)`);
-            } else if (progress > 0) {
+              console.log(`   → Status: COMPLETED (100% progress)`);
+            }
+            //  PRIORITY 3: In progress
+            else if (course.progress > 0) {
               finalStatus = 'IN_PROGRESS';
-              console.log(`⏳ ${course.courseTitle} is IN_PROGRESS (${progress}%)`);
-            } else {
+              console.log(`   → Status: IN_PROGRESS (${course.progress}%)`);
+            }
+            //  PRIORITY 4: Not started
+            else {
               finalStatus = 'NOT_STARTED';
-              console.log(`🆕 ${course.courseTitle} is NOT_STARTED`);
+              console.log(`   → Status: NOT_STARTED`);
             }
             
             return {
-              ...courseWithExpiry,
+              ...course,
               status: finalStatus,
-              progress: progress // Ensure progress is set
+              progress: course.progress || 0
             };
           });
           
-          console.log('✅ User courses with status:', coursesWithStatus.map(c => ({
-            title: c.courseTitle,
-            progress: c.progress,
-            status: c.status
-          })));
-          
+          console.log(' User courses processed:', coursesWithStatus.length);
           setCourses(coursesWithStatus);
         } else {
-          console.error('❌ Failed to fetch user courses:', result.error);
+          console.error(' Failed to fetch user courses:', result.error);
           setError(result.error);
         }
       } catch (err) {
-        console.error('❌ Error in fetchUserCourses:', err);
+        console.error(' Error in fetchUserCourses:', err);
         setError('An unexpected error occurred');
       } finally {
         setIsLoading(false);
@@ -114,36 +95,36 @@ const MyCoursePage = ({ onCourseClick }) => {
     fetchUserCourses();
   }, [user]);
 
-  // ✅ FIXED FILTERING: All (active courses), Completed (100%), Expired
+  //  FIXED FILTERING: All (active courses), Completed (100%), Expired
   const filteredCourses = useMemo(() => {
     let result = courses;
     
-    console.log('🔍 Filtering courses with activeFilter:', activeFilter);
-    console.log('📦 Total courses:', courses.length);
+    console.log(' Filtering courses with activeFilter:', activeFilter);
+    console.log(' Total courses:', courses.length);
     
-    // Apply status filter
     if (activeFilter === 'all') {
-      // "All" shows courses that are NOT expired and NOT 100% completed
+      //  "All" shows ACTIVE courses (not expired AND not 100% completed)
       result = courses.filter(c => {
-        const isNotExpired = c.status !== 'EXPIRED';
-        const isNotCompleted = c.status !== 'COMPLETED';
-        return isNotExpired && isNotCompleted;
+        const isActive = c.status !== 'EXPIRED' && c.status !== 'COMPLETED';
+        return isActive;
       });
-      console.log(`📋 "All" tab: ${result.length} active courses`);
-    } else if (activeFilter === 'completed') {
-      // ✅ CRITICAL: "Completed" shows ONLY courses with progress === 100
+      console.log(` "All" tab: ${result.length} active courses`);
+    } 
+    else if (activeFilter === 'completed') {
+      //  "Completed" shows ONLY courses with 100% progress
       result = courses.filter(c => {
         const isCompleted = c.progress === 100 && c.status === 'COMPLETED';
-        if (isCompleted) {
-          console.log(`✅ Including in Completed: ${c.courseTitle} (${c.progress}%)`);
-        }
         return isCompleted;
       });
       console.log(`🎉 "Completed" tab: ${result.length} completed courses`);
-    } else if (activeFilter === 'expired') {
-      // "Expired" shows only expired courses
-      result = courses.filter(c => c.status === 'EXPIRED');
-      console.log(`❌ "Expired" tab: ${result.length} expired courses`);
+    } 
+    else if (activeFilter === 'expired') {
+      // "Expired" shows courses with enrolledStatus = 'expired'
+      result = courses.filter(c => {
+        const isExpired = c.status === 'EXPIRED' || c.isExpired || c.enrolledStatus === 'expired';
+        return isExpired;
+      });
+      console.log(` "Expired" tab: ${result.length} expired courses`);
     }
     
     // Apply search filter
@@ -163,20 +144,34 @@ const MyCoursePage = ({ onCourseClick }) => {
     return result;
   }, [activeFilter, courses, searchQuery]);
 
-  // ✅ FIXED COUNT: All, Completed, Expired
+  //  Course counts for tabs
   const courseCounts = useMemo(() => {
     const counts = {
       all: courses.filter(c => c.status !== 'EXPIRED' && c.status !== 'COMPLETED').length,
       completed: courses.filter(c => c.progress === 100 && c.status === 'COMPLETED').length,
-      expired: courses.filter(c => c.status === 'EXPIRED').length,
+      expired: courses.filter(c => c.status === 'EXPIRED' || c.isExpired || c.enrolledStatus === 'expired').length,
     };
     
-    console.log('📊 Course counts:', counts);
+    console.log(' Course counts:', counts);
     return counts;
   }, [courses]);
 
   const handleClearSearch = () => {
     setSearchQuery('');
+  };
+
+  // Handle course click - block if expired
+  const handleCourseClick = (courseId) => {
+    const course = courses.find(c => c.id === courseId);
+    
+    if (course && (course.isExpired || course.enrolledStatus === 'expired' || course.status === 'EXPIRED')) {
+      toast.error(' This course has expired. Please contact support to renew access.');
+      return;
+    }
+    
+    if (onCourseClick) {
+      onCourseClick(courseId);
+    }
   };
 
   // Loading state
@@ -200,7 +195,7 @@ const MyCoursePage = ({ onCourseClick }) => {
         <div className="flex items-center justify-center flex-1">
           <div className="text-center">
             <div className="w-24 h-24 bg-red-100 rounded-full flex items-center justify-center mb-4 mx-auto">
-              <span className="text-4xl">⚠️</span>
+              <span className="text-4xl"></span>
             </div>
             <p className="text-red-600 font-semibold text-lg mb-2">Failed to load courses</p>
             <p className="text-gray-600 text-sm">{error}</p>
@@ -250,7 +245,7 @@ const MyCoursePage = ({ onCourseClick }) => {
         />
       </div>
 
-      {/* Desktop Filter Tabs */}
+      {/* Desktop Header */}
       <div className="hidden lg:block bg-white/80 backdrop-blur-xl border-b border-gray-200/50 sticky top-0 z-20 shadow-sm">
         <div className="px-8 py-6">
           <div className="flex items-center justify-between mb-4">
@@ -282,7 +277,7 @@ const MyCoursePage = ({ onCourseClick }) => {
         </div>
       </div>
 
-      {/* Course Cards List/Grid */}
+      {/* Course Cards Section */}
       <div className="flex-1 px-6 lg:px-8 py-6 lg:py-8 pb-24 lg:pb-6">
         {courses.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-64">
@@ -319,8 +314,10 @@ const MyCoursePage = ({ onCourseClick }) => {
               {searchQuery 
                 ? 'Try adjusting your search terms' 
                 : activeFilter === 'completed' 
-                  ? 'Complete a course to 100% to see it here! 🎯'
-                  : `No courses in "${filterTabs.find(t => t.id === activeFilter)?.label}"`
+                  ? 'Complete a course to 100% to see it here!'
+                  : activeFilter === 'expired'
+                    ? 'No expired courses yet'
+                    : `No courses in "${filterTabs.find(t => t.id === activeFilter)?.label}"`
               }
             </p>
           </motion.div>
@@ -355,6 +352,26 @@ const MyCoursePage = ({ onCourseClick }) => {
                   <h3 className="font-bold text-green-800 text-lg">Congratulations!</h3>
                   <p className="text-green-700 text-sm">
                     You've completed {filteredCourses.length} course{filteredCourses.length !== 1 ? 's' : ''}. Keep up the great work!
+                  </p>
+                </div>
+              </motion.div>
+            )}
+
+            {/* Warning for expired courses */}
+            {activeFilter === 'expired' && filteredCourses.length > 0 && (
+              <motion.div
+                className="mb-6 bg-gradient-to-r from-red-50 to-rose-50 border-2 border-red-200 rounded-xl p-4 flex items-center gap-3"
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.2 }}
+              >
+                <div className="w-12 h-12 bg-red-500 rounded-full flex items-center justify-center flex-shrink-0">
+                  <span className="text-2xl">⏰</span>
+                </div>
+                <div>
+                  <h3 className="font-bold text-red-800 text-lg">Course Access Expired</h3>
+                  <p className="text-red-700 text-sm">
+                    {filteredCourses.length} course{filteredCourses.length !== 1 ? 's have' : ' has'} expired. Contact support to renew access.
                   </p>
                 </div>
               </motion.div>
@@ -399,8 +416,11 @@ const MyCoursePage = ({ onCourseClick }) => {
                     isPurchased={true}
                     price={course.price}
                     expiryDate={course.expiryDate}
+                    validityMonths={course.validityMonths}
+                    enrolledStatus={course.enrolledStatus}
+                    isExpired={course.isExpired}
                     showStatus={false}
-                    onCourseClick={onCourseClick}
+                    onCourseClick={handleCourseClick}
                   />
                 </motion.div>
               ))}

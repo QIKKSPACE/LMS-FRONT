@@ -12,6 +12,7 @@ import { getCourseById, toggleLectureCompletion as toggleLectureInFirestore } fr
 import { initializeCourseProgress, toggleLectureCompletion } from '../utils/progressTracker';
 import { checkCourseExpiry } from '../utils/courseExpiry';
 import { useAuth } from '../context/AuthContext';
+import ProtectedVideoPlayer from '../components/ProtectedVideoPlayer'; 
 import toast from 'react-hot-toast';
 
 const MyCourseDetailsPage = ({ courseId, onBack }) => {
@@ -42,13 +43,12 @@ const MyCourseDetailsPage = ({ courseId, onBack }) => {
 
         if (result.success && result.course) {
           console.log('✅ Course fetched:', result.course);
-          console.log('📊 Sections found:', result.course.sections?.length || 0);
 
           // Get saved progress from Firestore
           const { getCourseProgress } = await import('../services/courseService');
           const progressResult = await getCourseProgress(user.uid, courseId);
           
-          console.log('📈 Progress data:', progressResult);
+          console.log(' Progress data:', progressResult);
 
           // Initialize course with progress
           const savedProgress = progressResult.success && progressResult.progress 
@@ -58,8 +58,7 @@ const MyCourseDetailsPage = ({ courseId, onBack }) => {
           const initializedCourse = initializeCourseProgress(result.course, savedProgress);
           const courseWithExpiry = checkCourseExpiry(initializedCourse);
           
-          console.log('✅ Course initialized with progress:', courseWithExpiry.progress + '%');
-          console.log('📝 Completed lectures:', savedProgress.completedLectures?.length || 0);
+          console.log(' Course initialized with progress:', courseWithExpiry.progress + '%');
           
           setCourse(courseWithExpiry);
 
@@ -73,11 +72,11 @@ const MyCourseDetailsPage = ({ courseId, onBack }) => {
             setExpandedSections(new Set([firstSection.id]));
           }
         } else {
-          console.error('❌ Failed to fetch course:', result.error);
+          console.error('Failed to fetch course:', result.error);
           toast.error('Failed to load course');
         }
       } catch (error) {
-        console.error('❌ Error fetching course:', error);
+        console.error('Error fetching course:', error);
         toast.error('An error occurred while loading the course');
       } finally {
         setIsLoading(false);
@@ -98,6 +97,7 @@ const MyCourseDetailsPage = ({ courseId, onBack }) => {
   };
 
   const selectLecture = (section, lecture) => {
+    console.log('🎥 Selecting lecture:', lecture.title);
     setSelectedSection(section);
     setSelectedLecture(lecture);
     setIsPlaying(true);
@@ -105,58 +105,57 @@ const MyCourseDetailsPage = ({ courseId, onBack }) => {
     setHasMarkedComplete(false);
   };
 
-  // ✅ NEW: Auto-mark lecture as complete when 90% watched
-  const handleVideoProgress = async () => {
-    if (!videoRef.current || !selectedLecture || !selectedSection) return;
+  // ✅ Auto-mark lecture as complete when 90% watched
+  const handleVideoProgress = async (e) => {
+    if (!e.target || !selectedLecture || !selectedSection) return;
     
-    const video = videoRef.current;
+    const video = e.target;
     const progress = (video.currentTime / video.duration) * 100;
     setVideoProgress(progress);
     
-    // Auto-complete when 90% watched and not already marked complete
+    // Auto-complete when 90% watched
     if (progress >= 90 && !selectedLecture.isCompleted && !hasMarkedComplete) {
-      console.log('🎯 Lecture 90% complete, auto-marking as done');
+      console.log(' Lecture 90% complete, auto-marking as done');
       setHasMarkedComplete(true);
       
-      // Create a synthetic event to trigger completion
-      const syntheticEvent = {
-        stopPropagation: () => {}
-      };
-      await handleToggleLectureCompletion(syntheticEvent, selectedSection.id, selectedLecture.id);
+      await handleToggleLectureCompletion(
+        { stopPropagation: () => {} }, 
+        selectedSection.id, 
+        selectedLecture.id
+      );
       
-      toast.success('✅ Lecture completed!', { duration: 2000 });
+      toast.success(' Lecture completed!', { duration: 2000 });
     }
   };
 
-  // ✅ FIXED: Handle lecture completion toggle with proper Firestore sync
+  //  Handle lecture completion toggle
   const handleToggleLectureCompletion = async (e, sectionId, lectureId) => {
     e.stopPropagation();
     
     if (!course || !user) return;
     
     try {
-      console.log('🔄 Toggling lecture completion:', { sectionId, lectureId });
+      console.log(' Toggling lecture completion:', { sectionId, lectureId });
       
-      // Update local state immediately for UI responsiveness
+      // Update local state
       const updatedCourse = toggleLectureCompletion(course, sectionId, lectureId);
       setCourse(updatedCourse);
       
-      console.log('✅ Local state updated, new progress:', updatedCourse.progress + '%');
+      console.log(' Local state updated, new progress:', updatedCourse.progress + '%');
       
-      // Update Firestore in background
+      // Update Firestore
       const result = await toggleLectureInFirestore(user.uid, courseId, sectionId, lectureId);
       
       if (result.success) {
-        console.log('✅ Firestore updated successfully');
+        console.log(' Firestore updated successfully');
         toast.success('Progress saved!', { duration: 1500 });
       } else {
-        console.error('❌ Failed to update Firestore:', result.error);
+        console.error(' Failed to update Firestore:', result.error);
         toast.error('Failed to save progress');
-        // Revert local state if Firestore update failed
         setCourse(course);
       }
       
-      // Update selected section and lecture if they match
+      // Update selected section/lecture
       const updatedSection = updatedCourse.sections.find(s => s.id === sectionId);
       if (updatedSection) {
         setSelectedSection(updatedSection);
@@ -166,53 +165,8 @@ const MyCourseDetailsPage = ({ courseId, onBack }) => {
         }
       }
     } catch (error) {
-      console.error('❌ Error toggling lecture completion:', error);
+      console.error(' Error toggling lecture:', error);
       toast.error('Failed to update progress');
-    }
-  };
-
-  const handlePlayPause = () => {
-    if (videoRef.current) {
-      if (isPlaying) {
-        videoRef.current.pause();
-      } else {
-        videoRef.current.play();
-      }
-      setIsPlaying(!isPlaying);
-    }
-  };
-
-  const handleNextLecture = () => {
-    if (!course || !selectedSection || !selectedLecture) return;
-    
-    const currentSectionIndex = course.sections.findIndex(s => s.id === selectedSection.id);
-    const currentLectureIndex = selectedSection.lecturesList.findIndex(l => l.id === selectedLecture.id);
-    
-    if (currentLectureIndex < selectedSection.lecturesList.length - 1) {
-      setSelectedLecture(selectedSection.lecturesList[currentLectureIndex + 1]);
-    } else if (currentSectionIndex < course.sections.length - 1) {
-      const nextSection = course.sections[currentSectionIndex + 1];
-      setSelectedSection(nextSection);
-      if (nextSection.lecturesList && nextSection.lecturesList.length > 0) {
-        setSelectedLecture(nextSection.lecturesList[0]);
-      }
-    }
-  };
-
-  const handlePreviousLecture = () => {
-    if (!course || !selectedSection || !selectedLecture) return;
-    
-    const currentSectionIndex = course.sections.findIndex(s => s.id === selectedSection.id);
-    const currentLectureIndex = selectedSection.lecturesList.findIndex(l => l.id === selectedLecture.id);
-    
-    if (currentLectureIndex > 0) {
-      setSelectedLecture(selectedSection.lecturesList[currentLectureIndex - 1]);
-    } else if (currentSectionIndex > 0) {
-      const prevSection = course.sections[currentSectionIndex - 1];
-      setSelectedSection(prevSection);
-      if (prevSection.lecturesList && prevSection.lecturesList.length > 0) {
-        setSelectedLecture(prevSection.lecturesList[prevSection.lecturesList.length - 1]);
-      }
     }
   };
 
@@ -289,7 +243,6 @@ const MyCourseDetailsPage = ({ courseId, onBack }) => {
         <h1 className="text-white text-sm font-medium truncate flex-1 mx-3">
           {course.courseTitle || course.title}
         </h1>
-        {/* ✅ Show progress in header */}
         <div className="text-xs text-green-400 font-bold">
           {course.progress || 0}%
         </div>
@@ -303,7 +256,6 @@ const MyCourseDetailsPage = ({ courseId, onBack }) => {
         <h1 className="text-white text-lg font-medium truncate flex-1">
           {course.courseTitle || course.title}
         </h1>
-        {/* ✅ Show progress in header */}
         <div className="flex items-center gap-4">
           <div className="text-sm text-gray-400">
             Progress: <span className="text-green-400 font-bold">{course.progress || 0}%</span>
@@ -316,59 +268,56 @@ const MyCourseDetailsPage = ({ courseId, onBack }) => {
 
       {/* Main Content */}
       <div className="flex-1 flex flex-col lg:flex-row overflow-hidden min-h-0">
-        {/* Video Section */}
+        {/* Video Section with Protected Player */}
         <div className="flex-1 flex flex-col bg-black relative min-h-[45vh] lg:min-h-0">
           <div className="relative flex-1 flex items-center justify-center">
-            {/* Video Player or Placeholder */}
-            <div className="w-full h-full flex items-center justify-center">
-              {selectedLecture && selectedLecture.url ? (
-                <video
-                  ref={videoRef}
-                  className="w-full h-full"
-                  controls
-                  src={selectedLecture.url}
-                  onPlay={() => setIsPlaying(true)}
-                  onPause={() => setIsPlaying(false)}
-                  onTimeUpdate={handleVideoProgress}
-                  onEnded={async () => {
-                    console.log('🎬 Video ended');
-                    if (!selectedLecture.isCompleted) {
-                      const syntheticEvent = { stopPropagation: () => {} };
-                      await handleToggleLectureCompletion(syntheticEvent, selectedSection.id, selectedLecture.id);
-                      toast.success('✅ Lecture completed!', { duration: 2000 });
-                    }
-                  }}
+            {selectedLecture && selectedLecture.url ? (
+              // ✅ USE PROTECTED VIDEO PLAYER
+              <ProtectedVideoPlayer
+                videoUrl={selectedLecture.url}
+                lectureTitle={selectedLecture.title}
+                onTimeUpdate={handleVideoProgress}
+                onEnded={async () => {
+                  console.log('🎬 Video ended');
+                  if (!selectedLecture.isCompleted) {
+                    await handleToggleLectureCompletion(
+                      { stopPropagation: () => {} }, 
+                      selectedSection.id, 
+                      selectedLecture.id
+                    );
+                    toast.success(' Lecture completed!', { duration: 2000 });
+                  }
+                }}
+                onPlay={() => setIsPlaying(true)}
+                onPause={() => setIsPlaying(false)}
+                className="w-full h-full"
+                autoPlay={false}
+              />
+            ) : (
+              <div className="text-center">
+                <div 
+                  className="w-20 h-20 bg-white/20 hover:bg-white/30 rounded-full flex items-center justify-center mb-4 mx-auto cursor-pointer"
                 >
-                  <source src={selectedLecture.url} type="video/mp4" />
-                  Your browser does not support the video tag.
-                </video>
-              ) : (
-                <div className="text-center">
-                  <div 
-                    onClick={handlePlayPause}
-                    className="w-20 h-20 bg-white/20 hover:bg-white/30 rounded-full flex items-center justify-center mb-4 mx-auto cursor-pointer"
-                  >
-                    {isPlaying ? (
-                      <Pause style={{ fontSize: '40px', color: 'white' }} />
-                    ) : (
-                      <PlayArrow style={{ fontSize: '40px', color: 'white', marginLeft: '4px' }} />
-                    )}
-                  </div>
-                  <p className="text-white text-lg">
-                    {selectedLecture ? selectedLecture.title : 'Select a lecture'}
-                  </p>
-                  {selectedLecture && !selectedLecture.url && (
-                    <p className="text-gray-400 text-sm mt-2">Video URL not available</p>
+                  {isPlaying ? (
+                    <Pause style={{ fontSize: '40px', color: 'white' }} />
+                  ) : (
+                    <PlayArrow style={{ fontSize: '40px', color: 'white', marginLeft: '4px' }} />
                   )}
                 </div>
-              )}
-            </div>
+                <p className="text-white text-lg">
+                  {selectedLecture ? selectedLecture.title : 'Select a lecture'}
+                </p>
+                {selectedLecture && !selectedLecture.url && (
+                  <p className="text-gray-400 text-sm mt-2">Video URL not available</p>
+                )}
+              </div>
+            )}
           </div>
         </div>
 
-        {/* Course Content Sidebar */}
+        {/* Course Content Sidebar - Keep existing code */}
         <div className="lg:w-80 bg-gray-800 border-l border-gray-700 flex flex-col min-h-0">
-          {/* ✅ Progress Bar at top of sidebar */}
+          {/* Progress Bar */}
           <div className="px-4 py-3 bg-gray-900 border-b border-gray-700">
             <div className="flex items-center justify-between mb-2">
               <span className="text-sm text-gray-400 font-medium">Course Progress</span>
@@ -385,7 +334,7 @@ const MyCourseDetailsPage = ({ courseId, onBack }) => {
             </div>
           </div>
 
-          {/* Sections List */}
+          {/* Sections List - Keep existing code */}
           <div className="flex-1 overflow-y-auto p-4">
             {course.sections.map((section) => (
               <div key={section.id} className="mb-4">

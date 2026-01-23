@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { motion } from 'framer-motion';
 import { Home, MenuBook, Person, VideoCall } from '@mui/icons-material';
@@ -88,20 +87,6 @@ const BottomNav = ({ activeTab, onTabChange }) => {
                     },
                     className: "relative transition-all duration-300"
                   })}
-                  
-                  {/* Active indicator dot */}
-                  {isActive && (
-                    <motion.div
-                      className="absolute -top-1 -right-1 w-2 h-2 bg-red-500 rounded-full"
-                      initial={{ scale: 0 }}
-                      animate={{ scale: 1 }}
-                      transition={{
-                        type: "spring",
-                        stiffness: 400,
-                        damping: 10
-                      }}
-                    />
-                  )}
                 </motion.div>
 
                 {/* Label with animation */}
@@ -118,19 +103,6 @@ const BottomNav = ({ activeTab, onTabChange }) => {
                 >
                   {item.label}
                 </motion.span>
-                
-                {/* Active underline */}
-                {isActive && (
-                  <motion.div
-                    className="absolute bottom-0 left-1/2 -translate-x-1/2 w-8 h-1 bg-gradient-to-r from-red-600 to-rose-600 rounded-full"
-                    layoutId="activeNavUnderline"
-                    transition={{
-                      type: "spring",
-                      stiffness: 380,
-                      damping: 30
-                    }}
-                  />
-                )}
               </motion.button>
             );
           })}
