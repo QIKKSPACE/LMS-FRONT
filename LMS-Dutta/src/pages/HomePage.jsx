@@ -345,7 +345,7 @@ const HomePage = ({ onCourseClick, onLogoClick }) => {
               transition={{ delay: 0.3 }}
             >
               <h2 className="text-2xl font-black bg-gradient-to-r from-gray-900 to-red-700 bg-clip-text text-transparent">
-                Featured Courses 🔥
+                Featured Courses
               </h2>
               {searchQuery && (
                 <span className="text-sm text-gray-600 font-medium">

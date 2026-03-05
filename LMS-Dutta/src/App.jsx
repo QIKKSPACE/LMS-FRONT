@@ -1,4 +1,5 @@
 import React, { useState, lazy, Suspense, useEffect } from 'react';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import toast, { Toaster } from 'react-hot-toast';
 import { initConsoleCleanup } from './utils/consoleCleanup';
@@ -7,11 +8,15 @@ const AuthPage = lazy(() => import('./pages/AuthPage'));
 const HomePage = lazy(() => import('./pages/HomePage'));
 const MyCoursePage = lazy(() => import('./pages/MyCoursePage'));
 const BuyCourseDetailPage = lazy(() => import('./pages/BuyCourseDetailPage'));
-const MyCourseDetailsPage = lazy(() => import('./pages/MyCourseDetailsPage'));
+// const MyCourseDetailsPage = lazy(() => import('./pages/MyCourseDetailsPage'));
 const ProfilePage = lazy(() => import('./pages/ProfilePage'));
 const LiveSessionPage = lazy(() => import('./pages/LiveSessionPage'));
 const BottomNav = lazy(() => import('./components/BottomNav'));
 const SidebarNav = lazy(() => import('./components/SidebarNav'));
+
+// ✅ ADD THESE TWO IMPORTS - Terms and Privacy pages
+const TermsOfService = lazy(() => import('./pages/TermsOfService'));
+const PrivacyPolicy = lazy(() => import('./pages/PrivacyPolicy'));
 
 const LoadingSpinner = () => (
   <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-100 flex items-center justify-center">
@@ -98,7 +103,7 @@ function AppContent() {
       <Suspense fallback={<LoadingSpinner />}>
         {isViewingPurchasedCourse ? (
           <div className="fixed inset-0 z-50 bg-gray-900">
-            <MyCourseDetailsPage
+            <MyCoursePage
               courseId={selectedCourseId}
               onBack={handleBackNavigation}
             />
@@ -159,78 +164,98 @@ function AppContent() {
 function App() {
   return (
     <AuthProvider>
-      {/* ✅ FIXED: Enhanced Toaster Configuration with Higher Z-Index */}
-      <Toaster
-        position="top-center"
-        reverseOrder={false}
-        gutter={12}
-        containerClassName="toast-container"
-        containerStyle={{
-          top: '80px',
-          zIndex: 99999,
-        }}
-        toastOptions={{
-          duration: 4000,
-          className: 'toast-notification',
-          style: {
-            background: '#ffffff',
-            color: '#1f2937',
-            padding: '16px 20px',
-            borderRadius: '12px',
-            boxShadow: '0 10px 40px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(0, 0, 0, 0.05)',
-            fontSize: '15px',
-            fontWeight: '500',
-            maxWidth: '500px',
-            minWidth: '320px',
-            backdropFilter: 'blur(10px)',
-          },
-          success: {
-            duration: 3500,
-            iconTheme: {
-              primary: '#10b981',
-              secondary: '#ffffff',
-            },
-            style: {
-              background: 'linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%)',
-              color: '#065f46',
-              border: '2px solid #10b981',
-            },
-          },
-          error: {
-            duration: 5000,
-            iconTheme: {
-              primary: '#ef4444',
-              secondary: '#ffffff',
-            },
-            style: {
-              background: 'linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%)',
-              color: '#991b1b',
-              border: '2px solid #ef4444',
-            },
-          },
-          loading: {
-            duration: Infinity,
-            iconTheme: {
-              primary: '#3b82f6',
-              secondary: '#ffffff',
-            },
-            style: {
-              background: 'linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%)',
-              color: '#1e40af',
-              border: '2px solid #3b82f6',
-            },
-          },
-          blank: {
+      {/* ✅ ADD ROUTER WRAPPER */}
+      <Router>
+        {/* ✅ FIXED: Enhanced Toaster Configuration with Higher Z-Index */}
+        <Toaster
+          position="top-center"
+          reverseOrder={false}
+          gutter={12}
+          containerClassName="toast-container"
+          containerStyle={{
+            top: '80px',
+            zIndex: 99999,
+          }}
+          toastOptions={{
             duration: 4000,
+            className: 'toast-notification',
             style: {
-              background: 'linear-gradient(135deg, #fefce8 0%, #fef3c7 100%)',
-              color: '#854d0e',
-              border: '2px solid #eab308',
+              background: '#ffffff',
+              color: '#1f2937',
+              padding: '16px 20px',
+              borderRadius: '12px',
+              boxShadow: '0 10px 40px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(0, 0, 0, 0.05)',
+              fontSize: '15px',
+              fontWeight: '500',
+              maxWidth: '500px',
+              minWidth: '320px',
+              backdropFilter: 'blur(10px)',
             },
-          },
-        }}
-      />
-      <AppContent />
+            success: {
+              duration: 3500,
+              iconTheme: {
+                primary: '#10b981',
+                secondary: '#ffffff',
+              },
+              style: {
+                background: 'linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%)',
+                color: '#065f46',
+                border: '2px solid #10b981',
+              },
+            },
+            error: {
+              duration: 5000,
+              iconTheme: {
+                primary: '#ef4444',
+                secondary: '#ffffff',
+              },
+              style: {
+                background: 'linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%)',
+                color: '#991b1b',
+                border: '2px solid #ef4444',
+              },
+            },
+            loading: {
+              duration: Infinity,
+              iconTheme: {
+                primary: '#3b82f6',
+                secondary: '#ffffff',
+              },
+              style: {
+                background: 'linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%)',
+                color: '#1e40af',
+                border: '2px solid #3b82f6',
+              },
+            },
+            blank: {
+              duration: 4000,
+              style: {
+                background: 'linear-gradient(135deg, #fefce8 0%, #fef3c7 100%)',
+                color: '#854d0e',
+                border: '2px solid #eab308',
+              },
+            },
+          }}
+        />
+        
+        {/* ✅ ADD ROUTES CONFIGURATION */}
+        <Routes>
+          {/* Legal Pages - Accessible without authentication */}
+          <Route path="/terms" element={
+            <Suspense fallback={<LoadingSpinner />}>
+              <TermsOfService />
+            </Suspense>
+          } />
+          <Route path="/privacy" element={
+            <Suspense fallback={<LoadingSpinner />}>
+              <PrivacyPolicy />
+            </Suspense>
+          } />
+          
+          {/* Main App Content */}
+          <Route path="/*" element={<AppContent />} />
+        </Routes>
+      </Router>
     </AuthProvider>
   );
 }

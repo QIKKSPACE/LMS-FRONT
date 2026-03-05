@@ -1,10 +1,8 @@
-// AuthPage.jsx - Updated with Custom Toast Utility
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Person, Email, Lock, Visibility, VisibilityOff } from '@mui/icons-material';
 import { useAuth } from '../context/AuthContext';
 import ForgotPasswordModal from '../components/ForgotPasswordModal';
-// ✅ Import custom toast utility instead of react-hot-toast
 import { showSuccess, showError, showLoading, dismissToast, authToasts } from '../utils/toast';
 import logo1 from '../assets/logo1.png';
 
@@ -68,7 +66,6 @@ const AuthPage = () => {
     e.preventDefault();
     
     if (!validateForm()) {
-      // ✅ Use custom error toast
       showError('Please fix the errors in the form', { duration: 3000 });
       return;
     }
@@ -81,21 +78,13 @@ const AuthPage = () => {
 
       if (isLogin) {
         console.log('Attempting login...');
-        // ✅ Show loading toast
         loadingToastId = showLoading('Logging in...');
-        
         result = await login(formData.email.trim(), formData.password);
-        
-        // ✅ Dismiss loading toast
         dismissToast(loadingToastId);
       } else {
         console.log('Attempting signup...');
-        // ✅ Show loading toast
         loadingToastId = showLoading('Creating account...');
-        
         result = await signup(formData.name.trim(), formData.email.trim(), formData.password);
-        
-        // ✅ Dismiss loading toast
         dismissToast(loadingToastId);
       }
 
@@ -109,19 +98,15 @@ const AuthPage = () => {
           confirmPassword: ''
         });
         
-        // ✅ Use custom success toast with shorter duration
         if (isLogin) {
           authToasts.loginSuccess();
         } else {
           authToasts.signupSuccess();
         }
-        
-        // Component will automatically unmount when user becomes authenticated
       } else {
         const errorMessage = result?.error || 'An error occurred. Please try again.';
         console.error('Auth failed:', errorMessage);
         
-        // ✅ Use custom error toast
         if (isLogin) {
           authToasts.loginError(errorMessage);
         } else {
@@ -130,7 +115,6 @@ const AuthPage = () => {
       }
     } catch (error) {
       console.error('Auth exception:', error);
-      // ✅ Use custom error toast
       showError('An unexpected error occurred. Please try again.', {
         duration: 4000,
       });
@@ -390,7 +374,24 @@ const AuthPage = () => {
         </motion.div>
 
         <p className="text-center text-gray-500 text-sm mt-6">
-          By continuing, you agree to our Terms of Service and Privacy Policy
+          By continuing, you agree to our{' '}
+          <a 
+            href="/terms" 
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-red-600 hover:text-red-700 underline underline-offset-2 transition-colors font-medium"
+          >
+            Terms of Service
+          </a>
+          {' '}and{' '}
+          <a 
+            href="/privacy" 
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-red-600 hover:text-red-700 underline underline-offset-2 transition-colors font-medium"
+          >
+            Privacy Policy
+          </a>
         </p>
       </motion.div>
     </div>

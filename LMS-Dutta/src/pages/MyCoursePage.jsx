@@ -16,7 +16,7 @@ const MyCoursePage = ({ onCourseClick }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const { user } = useAuth();
 
-  // ✅ THREE TABS: All (Active), Completed, Expired
+  //  THREE TABS: All (Active), Completed, Expired
   const filterTabs = [
     { id: 'all', label: 'All' },
     { id: 'completed', label: 'Completed' },

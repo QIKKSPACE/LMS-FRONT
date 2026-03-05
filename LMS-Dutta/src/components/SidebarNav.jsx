@@ -1,13 +1,13 @@
 import React from 'react';
 import { motion } from 'framer-motion';
 import { Home, MenuBook, Person, Logout, VideoCall } from '@mui/icons-material';
-import { useAuth } from '../context/AuthContext';
+import { useAuth } from '../context/AuthContext'; // ✅ ADDED: Import useAuth
 import logo1 from '../assets/logo1.png';
 
 const SidebarNav = ({ activeTab, onTabChange }) => {
-  const { logout, user } = useAuth();
+  const { logout } = useAuth(); // ✅ ADDED: Get logout function from context
   const iconColor = 'rgb(220, 38, 38)';
-  
+
   const navItems = [
     { id: 'home', label: 'Home', icon: Home },
     { id: 'mycourse', label: 'My Course', icon: MenuBook },
@@ -15,9 +15,16 @@ const SidebarNav = ({ activeTab, onTabChange }) => {
     { id: 'profile', label: 'Profile', icon: Person },
   ];
 
-  const handleLogout = () => {
+  // ✅ FIXED: Now logout is properly imported
+  const handleLogout = async () => {
     if (window.confirm('Are you sure you want to logout?')) {
-      logout();
+      console.log('🚪 Logging out...');
+      try {
+        await logout();
+        console.log('✅ Logout successful');
+      } catch (error) {
+        console.error('❌ Logout error:', error);
+      }
     }
   };
 
@@ -27,15 +34,16 @@ const SidebarNav = ({ activeTab, onTabChange }) => {
   };
 
   return (
-    <motion.div 
+    <motion.div
       className="hidden lg:flex fixed left-0 top-0 h-screen w-72 bg-white/95 backdrop-blur-2xl border-r border-gray-200/50 flex-col z-40 shadow-2xl"
       initial={{ x: -300 }}
       animate={{ x: 0 }}
       transition={{ type: "spring", stiffness: 100, damping: 20 }}
     >
       <div className="absolute inset-0 bg-gradient-to-br from-red-50/30 via-transparent to-purple-50/30 pointer-events-none" />
-      
-      <motion.div 
+
+      {/* Logo Section */}
+      <motion.div
         className="relative border-b border-gray-200/50 bg-gradient-to-br from-white/90 to-white/70 px-6 py-6 cursor-pointer hover:bg-gradient-to-br hover:from-white/95 hover:to-white/80 transition-all duration-300"
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
@@ -45,20 +53,20 @@ const SidebarNav = ({ activeTab, onTabChange }) => {
         <div className="flex items-center space-x-4">
           <motion.div
             className="relative"
-            animate={{ rotate: 0, scale: 1 }} 
+            animate={{ rotate: 0, scale: 1 }}
             whileHover={{ scale: 1.05, rotate: [0, -5, 5, 0] }}
             transition={{ duration: 0.5 }}
           >
             <div className="absolute inset-0 bg-gradient-to-br from-red-600 via-rose-600 to-red-700 rounded-2xl blur-lg opacity-30" />
-            <img 
-              src={logo1} 
-              alt="Logo" 
+            <img
+              src={logo1}
+              alt="Logo"
               className="relative h-14 w-14 object-contain flex-shrink-0 rounded-2xl shadow-lg"
             />
           </motion.div>
-          
+
           <div className="flex-1 min-w-0 overflow-hidden">
-            <motion.h1 
+            <motion.h1
               className="text-sm font-extrabold bg-gradient-to-r from-gray-900 via-red-800 to-gray-900 bg-clip-text text-transparent leading-tight mb-1"
               initial={{ x: -20, opacity: 0 }}
               animate={{ x: 0, opacity: 1 }}
@@ -66,7 +74,7 @@ const SidebarNav = ({ activeTab, onTabChange }) => {
             >
               BRAHMA DIVINE GRACE
             </motion.h1>
-            <motion.p 
+            <motion.p
               className="text-[11px] text-gray-600 leading-tight font-semibold"
               initial={{ x: -20, opacity: 0 }}
               animate={{ x: 0, opacity: 1 }}
@@ -76,33 +84,9 @@ const SidebarNav = ({ activeTab, onTabChange }) => {
             </motion.p>
           </div>
         </div>
-
-        {user && (
-          <motion.div
-            className="mt-4 pt-4 border-t border-gray-200/50"
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.5 }}
-          >
-            <div className="flex items-center space-x-3">
-              <div className="w-10 h-10 bg-gradient-to-br from-red-600 to-rose-600 rounded-full flex items-center justify-center shadow-md">
-                <span className="text-white font-bold text-sm">
-                  {user.name ? user.name.charAt(0).toUpperCase() : 'U'}
-                </span>
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-semibold text-gray-900 truncate">
-                  {user.name}
-                </p>
-                <p className="text-xs text-gray-500 truncate">
-                  {user.email}
-                </p>
-              </div>
-            </div>
-          </motion.div>
-        )}
       </motion.div>
-      
+
+      {/* Navigation Items */}
       <div className="relative flex flex-col px-4 py-8 flex-1 overflow-y-auto">
         {navItems.map((item, index) => {
           const isActive = activeTab === item.id;
@@ -128,34 +112,6 @@ const SidebarNav = ({ activeTab, onTabChange }) => {
                       damping: 30
                     }}
                   />
-                  
-                  <motion.div
-                    className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent"
-                    animate={{
-                      x: ['-100%', '200%']
-                    }}
-                    transition={{
-                      duration: 3,
-                      repeat: Infinity,
-                      ease: "linear"
-                    }}
-                  />
-                  
-                  <motion.div
-                    className="absolute inset-0 rounded-2xl"
-                    animate={{
-                      boxShadow: [
-                        '0 0 20px rgba(220, 38, 38, 0.3)',
-                        '0 0 30px rgba(220, 38, 38, 0.5)',
-                        '0 0 20px rgba(220, 38, 38, 0.3)'
-                      ]
-                    }}
-                    transition={{
-                      duration: 2,
-                      repeat: Infinity,
-                      ease: "easeInOut"
-                    }}
-                  />
                 </>
               ) : (
                 <motion.div
@@ -163,7 +119,7 @@ const SidebarNav = ({ activeTab, onTabChange }) => {
                   transition={{ duration: 0.2 }}
                 />
               )}
-              
+
               <motion.div
                 className="relative z-10 mr-4"
                 animate={{
@@ -176,21 +132,20 @@ const SidebarNav = ({ activeTab, onTabChange }) => {
                   ease: "easeInOut"
                 }}
               >
-                {React.createElement(item.icon, { 
-                  style: { 
-                    color: isActive ? 'white' : iconColor, 
+                {React.createElement(item.icon, {
+                  style: {
+                    color: isActive ? 'white' : iconColor,
                     fontSize: '22px',
                     filter: isActive ? 'drop-shadow(0 2px 4px rgba(0, 0, 0, 0.2))' : 'none'
                   }
                 })}
               </motion.div>
-              
-              <span className={`relative z-10 font-bold text-base ${
-                isActive ? 'text-white' : 'text-gray-700 group-hover:text-red-600'
-              } transition-colors duration-300`}>
+
+              <span className={`relative z-10 font-bold text-base ${isActive ? 'text-white' : 'text-gray-700 group-hover:text-red-600'
+                } transition-colors duration-300`}>
                 {item.label}
               </span>
-              
+
               {isActive && (
                 <motion.div
                   className="absolute right-4 top-1/2 -translate-y-1/2 w-2 h-2 bg-white rounded-full shadow-lg"
@@ -207,8 +162,9 @@ const SidebarNav = ({ activeTab, onTabChange }) => {
           );
         })}
       </div>
-      
-      <motion.div 
+
+      {/* Logout Button */}
+      <motion.div
         className="relative px-4 pb-6 mt-auto"
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -224,17 +180,17 @@ const SidebarNav = ({ activeTab, onTabChange }) => {
             className="absolute inset-0 bg-gradient-to-r from-red-50 to-rose-50 rounded-2xl opacity-0 group-hover:opacity-100"
             transition={{ duration: 0.3 }}
           />
-          
+
           <motion.div
             className="relative z-10 mr-4"
             whileHover={{ rotate: 15 }}
             transition={{ duration: 0.3 }}
           >
-            {React.createElement(Logout, { 
+            {React.createElement(Logout, {
               style: { color: iconColor, fontSize: '22px' }
             })}
           </motion.div>
-          
+
           <span className="relative z-10 font-bold text-base text-gray-700 group-hover:text-red-600 transition-colors duration-300">
             Logout
           </span>

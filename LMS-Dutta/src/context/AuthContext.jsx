@@ -1,4 +1,3 @@
-// src/context/AuthContext.jsx - FIXED WITH refreshUserData
 import React, { createContext, useState, useContext, useEffect, useCallback, useMemo } from 'react';
 import { 
   signupUser, 
@@ -24,10 +23,10 @@ export const AuthProvider = ({ children }) => {
   const [isLoading, setIsLoading] = useState(true);
   const [authInitialized, setAuthInitialized] = useState(false);
 
-  // ✅ NEW: Function to refresh user data from Firestore
+  // ✅ Function to refresh user data from Firestore
   const refreshUserData = useCallback(async () => {
     if (!user || !user.uid) {
-      console.log('No user to refresh');
+      console.log('⚠️ No user to refresh');
       return { success: false, error: 'No user logged in' };
     }
 
@@ -57,9 +56,9 @@ export const AuthProvider = ({ children }) => {
     }
   }, [user]);
 
-  // Memoize auth state listener to prevent recreation
+  // ✅ Auth state listener
   useEffect(() => {
-    console.log('Setting up auth state listener');
+    console.log('🔧 Setting up auth state listener');
     let isMounted = true;
     
     const unsubscribe = onAuthChange(async (firebaseUser) => {
@@ -67,36 +66,36 @@ export const AuthProvider = ({ children }) => {
 
       try {
         if (firebaseUser) {
-          console.log('Firebase user detected:', firebaseUser.uid);
+          console.log('👤 Firebase user detected:', firebaseUser.uid);
           
-          // OPTIMIZATION: Check if we already have this user's data
+          // Check cache first
           const cachedUser = sessionStorage.getItem(`user_${firebaseUser.uid}`);
           if (cachedUser) {
-            console.log('Using cached user profile');
+            console.log('📦 Using cached user profile');
             setUser(JSON.parse(cachedUser));
             setIsLoading(false);
             setAuthInitialized(true);
             return;
           }
 
-          // Fetch profile only if not cached
+          // Fetch fresh profile
           const result = await getUserProfile(firebaseUser.uid);
           
           if (result.success && isMounted) {
-            console.log('User profile loaded successfully');
+            console.log('✅ User profile loaded successfully');
             const userData = result.user;
             setUser(userData);
-            // Cache user data
             sessionStorage.setItem(`user_${firebaseUser.uid}`, JSON.stringify(userData));
           } else if (isMounted) {
-            console.log('Creating basic user profile');
+            console.log('⚠️ Creating basic user profile');
             const newProfile = {
               uid: firebaseUser.uid,
               email: firebaseUser.email,
               name: firebaseUser.displayName || firebaseUser.email.split('@')[0],
               mobileNumber: '',
+              phoneVerified: false,
               address: '',
-              purchasedCourses: [], // ✅ Initialize empty array
+              purchasedCourses: [],
               createdAt: new Date().toISOString(),
               updatedAt: new Date().toISOString()
             };
@@ -104,12 +103,12 @@ export const AuthProvider = ({ children }) => {
             sessionStorage.setItem(`user_${firebaseUser.uid}`, JSON.stringify(newProfile));
           }
         } else {
-          console.log('No user signed in');
+          console.log('🚪 No user signed in - clearing state');
           setUser(null);
-          sessionStorage.clear(); // Clear all cached data
+          sessionStorage.clear();
         }
       } catch (error) {
-        console.error('Error in auth state change:', error);
+        console.error('❌ Error in auth state change:', error);
         if (isMounted) {
           setUser(null);
         }
@@ -123,36 +122,35 @@ export const AuthProvider = ({ children }) => {
 
     return () => {
       isMounted = false;
-      console.log('Cleaning up auth state listener');
+      console.log('🧹 Cleaning up auth state listener');
       unsubscribe();
     };
   }, []);
 
-  // OPTIMIZATION: Memoize signup function
+  // ✅ Signup function
   const signup = useCallback(async (name, email, password) => {
-    console.log('Signup attempt for:', email);
+    console.log('📝 Signup attempt for:', email);
     
     try {
       setIsLoading(true);
       const result = await signupUser(name, email, password);
       
       if (result.success) {
-        console.log('Signup successful');
+        console.log('✅ Signup successful');
         const userData = {
           ...result.user,
-          purchasedCourses: result.user.purchasedCourses || [] // ✅ Ensure array exists
+          purchasedCourses: result.user.purchasedCourses || []
         };
         setUser(userData);
-        // Cache immediately
         sessionStorage.setItem(`user_${userData.uid}`, JSON.stringify(userData));
         return { success: true, user: userData };
       } else {
-        console.error('Signup failed:', result.error);
+        console.error('❌ Signup failed:', result.error);
         setIsLoading(false);
         return result;
       }
     } catch (error) {
-      console.error('Signup exception:', error);
+      console.error('❌ Signup exception:', error);
       setIsLoading(false);
       return { 
         success: false, 
@@ -161,31 +159,30 @@ export const AuthProvider = ({ children }) => {
     }
   }, []);
 
-  // OPTIMIZATION: Memoize login function
+  // ✅ Login function
   const login = useCallback(async (email, password) => {
-    console.log('Login attempt for:', email);
+    console.log('🔐 Login attempt for:', email);
     
     try {
       setIsLoading(true);
       const result = await loginUser(email, password);
       
       if (result.success) {
-        console.log('Login successful');
+        console.log('✅ Login successful');
         const userData = {
           ...result.user,
-          purchasedCourses: result.user.purchasedCourses || [] // ✅ Ensure array exists
+          purchasedCourses: result.user.purchasedCourses || []
         };
         setUser(userData);
-        // Cache immediately
         sessionStorage.setItem(`user_${userData.uid}`, JSON.stringify(userData));
         return { success: true, user: userData };
       } else {
-        console.error('Login failed:', result.error);
+        console.error('❌ Login failed:', result.error);
         setIsLoading(false);
         return result;
       }
     } catch (error) {
-      console.error('Login exception:', error);
+      console.error('❌ Login exception:', error);
       setIsLoading(false);
       return { 
         success: false, 
@@ -194,56 +191,81 @@ export const AuthProvider = ({ children }) => {
     }
   }, []);
 
-  // OPTIMIZATION: Memoize logout function
+  // ✅ FIXED: Logout function with proper cleanup
   const logout = useCallback(async () => {
-    console.log('Logout initiated');
+    console.log('🚪 Logout initiated');
     
     try {
       setIsLoading(true);
+      
+      // ✅ Clear state BEFORE calling Firebase logout
+      const tempUser = user; // Save for logging
+      setUser(null);
+      sessionStorage.clear();
+      localStorage.clear();
+      
+      console.log('🧹 Local state cleared for user:', tempUser?.uid);
+      
+      // ✅ Then call Firebase logout
       const result = await logoutUser();
       
       if (result.success) {
-        console.log('Logout successful');
-        setUser(null);
-        sessionStorage.clear();
+        console.log('✅ Firebase logout successful');
+      } else {
+        console.error('⚠️ Firebase logout had issues but local state is cleared');
       }
       
       setIsLoading(false);
+      
+      // ✅ Force page reload to ensure clean state
+      setTimeout(() => {
+        window.location.href = '/';
+      }, 100);
+      
     } catch (error) {
-      console.error('Logout error:', error);
+      console.error('❌ Logout error:', error);
+      
+      // ✅ Even on error, clear everything
+      setUser(null);
+      sessionStorage.clear();
+      localStorage.clear();
       setIsLoading(false);
+      
+      // ✅ Still reload page
+      setTimeout(() => {
+        window.location.href = '/';
+      }, 100);
     }
-  }, []);
+  }, [user]);
 
-  // OPTIMIZATION: Memoize updateProfile function
+  // ✅ Update profile function
   const updateProfile = useCallback(async (updatedData) => {
     if (!user || !user.uid) {
-      console.error('Update profile failed: No user logged in');
+      console.error('❌ Update profile failed: No user logged in');
       return { success: false, error: 'No user logged in' };
     }
 
-    console.log('Updating profile for user:', user.uid);
+    console.log('📝 Updating profile for user:', user.uid);
 
     try {
       const result = await updateUserProfile(user.uid, updatedData);
       
       if (result && result.success) {
-        console.log('Profile update successful');
+        console.log('✅ Profile update successful');
         const userData = {
           ...result.user,
-          purchasedCourses: result.user.purchasedCourses || user.purchasedCourses || [] // ✅ Preserve purchased courses
+          purchasedCourses: result.user.purchasedCourses || user.purchasedCourses || []
         };
         setUser(userData);
-        // Update cache
         sessionStorage.setItem(`user_${userData.uid}`, JSON.stringify(userData));
         return { success: true, user: userData };
       } else {
         const errorMsg = result?.error || 'Failed to update profile';
-        console.error('Profile update failed:', errorMsg);
+        console.error('❌ Profile update failed:', errorMsg);
         return { success: false, error: errorMsg };
       }
     } catch (error) {
-      console.error('Profile update exception:', error);
+      console.error('❌ Profile update exception:', error);
       return { 
         success: false, 
         error: error.message || 'An unexpected error occurred during profile update' 
@@ -251,7 +273,7 @@ export const AuthProvider = ({ children }) => {
     }
   }, [user]);
 
-  // OPTIMIZATION: Memoize context value
+  // ✅ Memoize context value
   const value = useMemo(() => ({
     user,
     isLoading,
@@ -259,7 +281,7 @@ export const AuthProvider = ({ children }) => {
     login,
     logout,
     updateProfile,
-    refreshUserData, // ✅ Export the new function
+    refreshUserData,
     isAuthenticated: !!user,
     authInitialized
   }), [user, isLoading, signup, login, logout, updateProfile, refreshUserData, authInitialized]);

@@ -33,12 +33,12 @@ export const signupUser = async (name, email, password) => {
       };
     }
 
-    console.log('Creating user with email:', email);
+    console.log('📝 Creating user with email:', email);
 
     const userCredential = await createUserWithEmailAndPassword(auth, email, password);
     const user = userCredential.user;
 
-    console.log('User created successfully:', user.uid);
+    console.log('✅ User created successfully:', user.uid);
 
     await updateFirebaseProfile(user, {
       displayName: name
@@ -50,7 +50,7 @@ export const signupUser = async (name, email, password) => {
       name: name,
       email: email,
       mobileNumber: '',
-      phoneVerified: false, // ✅ New field
+      phoneVerified: false,
       address: '',
       purchasedCourses: [],
       createdAt: serverTimestamp(),
@@ -59,7 +59,7 @@ export const signupUser = async (name, email, password) => {
 
     await setDoc(doc(db, 'users', user.uid), userProfile);
 
-    console.log('User profile created in Firestore');
+    console.log('✅ User profile created in Firestore');
 
     return { 
       success: true, 
@@ -70,7 +70,7 @@ export const signupUser = async (name, email, password) => {
       }
     };
   } catch (error) {
-    console.error("Signup error:", error);
+    console.error("❌ Signup error:", error);
     return { 
       success: false, 
       error: getErrorMessage(error.code) 
@@ -93,25 +93,24 @@ export const loginUser = async (email, password) => {
     const trimmedEmail = email.trim();
     const trimmedPassword = password.trim();
 
-    console.log('Login attempt for:', trimmedEmail);
+    console.log('🔐 Login attempt for:', trimmedEmail);
 
     const userCredential = await signInWithEmailAndPassword(auth, trimmedEmail, trimmedPassword);
     const user = userCredential.user;
 
-    console.log('User signed in successfully:', user.uid);
+    console.log('✅ User signed in successfully:', user.uid);
 
     const userDocRef = doc(db, 'users', user.uid);
     const userDocSnap = await getDoc(userDocRef);
 
     if (userDocSnap.exists()) {
-      console.log('User profile found in Firestore');
+      console.log('✅ User profile found in Firestore');
       const userProfile = userDocSnap.data();
       
-      // ✅ Ensure phoneVerified exists
       const completeProfile = {
         ...userProfile,
         purchasedCourses: userProfile.purchasedCourses || [],
-        phoneVerified: userProfile.phoneVerified || false, // ✅ New field
+        phoneVerified: userProfile.phoneVerified || false,
         createdAt: userProfile.createdAt?.toDate?.()?.toISOString() || new Date().toISOString(),
         updatedAt: userProfile.updatedAt?.toDate?.()?.toISOString() || new Date().toISOString()
       };
@@ -123,14 +122,13 @@ export const loginUser = async (email, password) => {
         user: completeProfile
       };
     } else {
-      console.log('User profile not found, creating new one');
-      // ✅ Create profile with phoneVerified
+      console.log('⚠️ User profile not found, creating new one');
       const userProfile = {
         uid: user.uid,
         name: user.displayName || trimmedEmail.split('@')[0],
         email: user.email,
         mobileNumber: '',
-        phoneVerified: false, // ✅ New field
+        phoneVerified: false,
         address: '',
         purchasedCourses: [],
         createdAt: serverTimestamp(),
@@ -149,7 +147,7 @@ export const loginUser = async (email, password) => {
       };
     }
   } catch (error) {
-    console.error("Login error:", error);
+    console.error("❌ Login error:", error);
     return { 
       success: false, 
       error: getErrorMessage(error.code) 
@@ -158,29 +156,49 @@ export const loginUser = async (email, password) => {
 };
 
 /**
- * Sign out current user
+ * ✅ FIXED: Sign out current user with proper cleanup
  */
 export const logoutUser = async () => {
   try {
+    console.log('🚪 Logging out user...');
+    
+    // ✅ Clear all session storage first
+    sessionStorage.clear();
+    
+    // ✅ Clear local storage (if you use it)
+    localStorage.clear();
+    
+    // ✅ Sign out from Firebase
     await signOut(auth);
-    console.log('User signed out successfully');
+    
+    console.log('✅ User signed out successfully');
+    
     return { success: true };
   } catch (error) {
-    console.error("Logout error:", error);
+    console.error("❌ Logout error:", error);
+    
+    // ✅ Even if Firebase logout fails, clear local data
+    try {
+      sessionStorage.clear();
+      localStorage.clear();
+    } catch (clearError) {
+      console.error("❌ Error clearing storage:", clearError);
+    }
+    
     return { 
       success: false, 
-      error: "Failed to logout" 
+      error: "Failed to logout. Please try again." 
     };
   }
 };
 
 /**
- * ✅ UPDATED: Update user profile with phoneVerified support
+ * Update user profile
  */
 export const updateUserProfile = async (userId, updates) => {
   try {
     if (!userId) {
-      console.error('Update failed: User ID is required');
+      console.error('❌ Update failed: User ID is required');
       return {
         success: false,
         error: 'User ID is required'
@@ -188,64 +206,62 @@ export const updateUserProfile = async (userId, updates) => {
     }
 
     if (!updates || Object.keys(updates).length === 0) {
-      console.error('Update failed: No updates provided');
+      console.error('❌ Update failed: No updates provided');
       return {
         success: false,
         error: 'No updates provided'
       };
     }
 
-    console.log('Updating profile for user:', userId);
-    console.log('Updates to apply:', updates);
+    console.log('📝 Updating profile for user:', userId);
+    console.log('📦 Updates to apply:', updates);
 
     const userDocRef = doc(db, 'users', userId);
     
     const userDocSnap = await getDoc(userDocRef);
     if (!userDocSnap.exists()) {
-      console.error('User not found in Firestore');
+      console.error('❌ User not found in Firestore');
       return {
         success: false,
         error: 'User profile not found'
       };
     }
 
-    // ✅ Include phoneVerified in updates
     const updateData = {
       ...updates,
       updatedAt: serverTimestamp()
     };
 
-    console.log('Applying updates to Firestore...');
+    console.log('💾 Applying updates to Firestore...');
     await updateDoc(userDocRef, updateData);
 
-    console.log('Profile updated successfully in Firestore');
+    console.log('✅ Profile updated successfully in Firestore');
 
     const updatedDocSnap = await getDoc(userDocRef);
     
     if (updatedDocSnap.exists()) {
       const updatedUser = updatedDocSnap.data();
-      console.log('Fetched updated user profile:', updatedUser);
+      console.log('✅ Fetched updated user profile');
       
-      // ✅ Ensure phoneVerified is included
       return { 
         success: true, 
         user: {
           ...updatedUser,
           purchasedCourses: updatedUser.purchasedCourses || [],
-          phoneVerified: updatedUser.phoneVerified || false, // ✅ New field
+          phoneVerified: updatedUser.phoneVerified || false,
           createdAt: updatedUser.createdAt?.toDate?.()?.toISOString() || new Date().toISOString(),
           updatedAt: updatedUser.updatedAt?.toDate?.()?.toISOString() || new Date().toISOString()
         }
       };
     } else {
-      console.error('Failed to fetch updated profile');
+      console.error('❌ Failed to fetch updated profile');
       return {
         success: false,
         error: 'Failed to fetch updated profile'
       };
     }
   } catch (error) {
-    console.error("Update profile error:", error);
+    console.error("❌ Update profile error:", error);
     return { 
       success: false, 
       error: `Failed to update profile: ${error.message}` 
@@ -265,20 +281,19 @@ export const getUserProfile = async (userId) => {
       };
     }
 
-    console.log('Fetching profile for user:', userId);
+    console.log('📥 Fetching profile for user:', userId);
 
     const userDocRef = doc(db, 'users', userId);
     const userDocSnap = await getDoc(userDocRef);
 
     if (userDocSnap.exists()) {
-      console.log('User profile fetched successfully');
+      console.log('✅ User profile fetched successfully');
       const userData = userDocSnap.data();
       
-      // ✅ Ensure phoneVerified exists
       const completeProfile = {
         ...userData,
         purchasedCourses: userData.purchasedCourses || [],
-        phoneVerified: userData.phoneVerified || false, // ✅ New field
+        phoneVerified: userData.phoneVerified || false,
         createdAt: userData.createdAt?.toDate?.()?.toISOString() || new Date().toISOString(),
         updatedAt: userData.updatedAt?.toDate?.()?.toISOString() || new Date().toISOString()
       };
@@ -290,14 +305,14 @@ export const getUserProfile = async (userId) => {
         user: completeProfile
       };
     } else {
-      console.log('User profile not found in Firestore');
+      console.log('❌ User profile not found in Firestore');
       return { 
         success: false, 
         error: "User profile not found" 
       };
     }
   } catch (error) {
-    console.error("Get profile error:", error);
+    console.error("❌ Get profile error:", error);
     return { 
       success: false, 
       error: "Failed to fetch profile" 
@@ -311,9 +326,9 @@ export const getUserProfile = async (userId) => {
 export const onAuthChange = (callback) => {
   return onAuthStateChanged(auth, async (firebaseUser) => {
     if (firebaseUser) {
-      console.log('Auth state changed: User signed in', firebaseUser.uid);
+      console.log('🔄 Auth state changed: User signed in', firebaseUser.uid);
     } else {
-      console.log('Auth state changed: User signed out');
+      console.log('🔄 Auth state changed: User signed out');
     }
     callback(firebaseUser);
   });

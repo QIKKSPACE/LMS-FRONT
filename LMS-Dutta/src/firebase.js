@@ -1,50 +1,45 @@
-import { initializeApp } from "firebase/app";
-import { getAuth } from "firebase/auth";
-import { getFirestore } from "firebase/firestore";
-import { initializeAppCheck, ReCaptchaV3Provider } from "firebase/app-check";
+import { initializeApp } from 'firebase/app';
+import { getAuth } from 'firebase/auth';
+import { getFirestore } from 'firebase/firestore';
+import { getStorage } from 'firebase/storage';
 
+// ✅ Your Firebase configuration
 const firebaseConfig = {
-    apiKey: "AIzaSyCLhGlh_Taw-aRI7vEQBEzkzrjeuAKUxNc",
-    authDomain: "stf-web-34a3b.firebaseapp.com",
-    databaseURL: "https://stf-web-34a3b-default-rtdb.firebaseio.com",
-    projectId: "stf-web-34a3b",
-    storageBucket: "stf-web-34a3b.firebasestorage.app",
-    messagingSenderId: "311427704953",
-    appId: "1:311427704953:web:a93b0b28026b4d140b0ca8",
-    measurementId: "G-79FBF73WJM"
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+  appId: import.meta.env.VITE_FIREBASE_APP_ID,
+  measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID
 };
 
-// Initialize Firebase
-console.log(' Initializing Firebase...');
+// ✅ Initialize Firebase
+console.log('🔥 Initializing Firebase...');
 const app = initializeApp(firebaseConfig);
-console.log(' Firebase initialized successfully');
 
-// Initialize Auth
+// ✅ Initialize services
 export const auth = getAuth(app);
-console.log(' Firebase Auth initialized');
-
-// Initialize Firestore Database
 export const db = getFirestore(app);
-console.log(' Firestore Database initialized');
+export const storage = getStorage(app);
 
-//  FIX: Initialize App Check for development
-// This tells Firebase your app is legitimate
-if (typeof window !== 'undefined') {
-  try {
-    console.log(' Initializing Firebase App Check...');
-    
-    // For development/testing - use debug token
-    //  IMPORTANT: In production, get proper reCAPTCHA site key from Firebase Console
-    const appCheck = initializeAppCheck(app, {
-      provider: new ReCaptchaV3Provider('6LcVXXXXXXXXXXXXXXXXXXXXXXXXXXXX'), // Placeholder
-      isTokenAutoRefreshEnabled: true
-    });
-    
-    console.log(' App Check initialized');
-  } catch (error) {
-    console.warn(' App Check initialization failed:', error);
-    console.log(' Continuing without App Check (development mode)');
-  }
+// ✅ CRITICAL FIX: Disable reCAPTCHA for development
+if (import.meta.env.DEV) {
+  console.log('🔧 Development mode: Disabling reCAPTCHA verification');
+  auth.settings.appVerificationDisabledForTesting = true;
 }
+
+// ✅ Set auth persistence (optional but recommended)
+import { setPersistence, browserLocalPersistence } from 'firebase/auth';
+
+setPersistence(auth, browserLocalPersistence)
+  .then(() => {
+    console.log('✅ Auth persistence set to LOCAL');
+  })
+  .catch((error) => {
+    console.error('❌ Error setting auth persistence:', error);
+  });
+
+console.log('✅ Firebase initialized successfully');
 
 export default app;
